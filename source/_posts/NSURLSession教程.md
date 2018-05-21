@@ -4,7 +4,6 @@ date: 2018-05-18 17:19:55
 tags:
 ---
 
-# NSURLSession教程
 本文翻译自 https://www.raywenderlich.com/110458/nsurlsession-tutorial-getting-started   
 
 原作者：[Ken Toh](https://www.raywenderlich.com/u/kentoh)    
