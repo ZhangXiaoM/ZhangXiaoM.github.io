@@ -3,7 +3,7 @@ menu:
     Archive: /archives/
     # Weibo: 
     GitHub: https://github.com/ZhangXiaoM
-    Rss: /atom.xml
+    # Rss: /atom.xml
 
 favicon: /favicon.png
 logo: /favicon.png
