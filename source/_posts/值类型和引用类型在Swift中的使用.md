@@ -1,17 +1,20 @@
 ---
-title: Swift中的值类型和引用类型
-date: 2018-01-02 10:06:30
+title: 值类型和引用类型在Swift中的使用
+date: 2018-01-02 14:22:50
 tags:
 ---
 
 ## 前言 值类型 vs 引用类型
+
 ### 1、什么是值类型
+
 值类型就是值直接保存在变量中。例如：
 
 ```c
 int a = 10;
-a = 20;
+a = 20; 
 ```
+
 值类型赋新值的时候会直接覆盖旧值。
 
 ![](https://user-gold-cdn.xitu.io/2018/1/2/160b5665a4d091ad?w=320&h=94&f=png&s=614)
@@ -22,6 +25,7 @@ int b = a;
 // 2
 b = 30;
 ```
+
 按注释：
 
 1.这段代码首先声明了一个`int`类型的变量`b`，然后将`a`中保存的值赋值给`b`。
@@ -83,6 +87,7 @@ let y = x			    // x is copied to y
 x.data = 42				// changes the instance referred to by x (and y)
 println("\(x.data), \(y.data)")	// prints "42, 42"
 ```
+
 上述代码的内存如下图所示，变量`x`和`y`指向同一个类`C`的实例。
 ![](https://user-gold-cdn.xitu.io/2018/1/2/160b564a2543e978?w=384&h=140&f=png&s=6615)
 
@@ -99,6 +104,7 @@ a.data = 42						// Changes a, not b
 println("\(a.data), \(b.data)")	// prints "42, -1"
 
 ```
+
 内存如下图所示，对实例进行赋值操作时，`b = a`，会将`a`的拷贝赋值给`b`，而不是`a`本身，因此，`a`和`b`保存了两个不同的实例，对其中一个的修改不会影响另一个（下图箭头并不是指针的意思，为了表示清楚一点用了箭头）。
 
 ![](https://user-gold-cdn.xitu.io/2018/1/2/160b564a1f79f5b2?w=391&h=155&f=png&s=8231)
@@ -115,6 +121,7 @@ let m = C()
 x = m //ERROR: note: change 'let' to 'var' to make it mutable
 x.data = 55 // It's OK
 ```
+
 对于值类型来说，`let`的意思是*实例*必须是常量，而常量也是不变的，因此不能修改常量中保存的值，也不能修改值的本身。
 
 ```swift
@@ -123,6 +130,7 @@ a.data = 2 //ERROR: note: change 'let' to 'var' to make it mutable
 let b = S()
 a = b //ERROR: note: change 'let' to 'var' to make it mutable
 ```
+
 因此，相对于引用类型来说，值类型能更好控制实例可变和不可变，例如`NSString `和`NSMutableString `，只需要将字符串声明为`let a = " "`，那么它就是不可变类型的字符串，声明为`var a: String?`，它就是可变字符串。（Swift中的String为值类型）
 
 ### 4、如何选择
@@ -133,18 +141,18 @@ a = b //ERROR: note: change 'let' to 'var' to make it mutable
 
 使用值类型的情况：
 
-+ 使用`==`比较两个实例时
-+ 当你需要一份独立的备份时
-+ 多线程中可能会修改数据时
+- 使用`==`比较两个实例时
+- 当你需要一份独立的备份时
+- 多线程中可能会修改数据时
 
 使用引用类型的情况：
 
-+ 使用`===`比较两个实例时
-+ 你需要共享并且修改这个类型的实例时
+- 使用`===`比较两个实例时
+- 你需要共享并且修改这个类型的实例时
 
->`==(Equal To)`表示两个实例的值相等(注意，值类型变量中保存的是值不是地址)；
+> `==(Equal To)`表示两个实例的值相等(注意，值类型变量中保存的是值不是地址)；
 
->`===(Identical To)`表示两个实例完全相等，包括它们在内存中的地址也相同。
+> `===(Identical To)`表示两个实例完全相等，包括它们在内存中的地址也相同。
 
 在Swift中，`Array ``String ``Dictionary ``Int``Bool`等数据类型都是值类型，换句话说都是`struct`而不是`class`。因此在对它们赋值、传参等操作时，切记它是值传递，而不是引用传递。
 
@@ -173,6 +181,7 @@ Named type（命名类型）是指在定义时，可以使用特定的名字去�
 let foo: Double = 0.0
 // Double: 特定的命名类型
 ```
+
 Named model type（命名模型类型）是指可以在声明的时候可以重写`setter`或者`getter`的类型。例如：
 
 假如你有一个存储*半径*的变量，然后要声明一个存储*直径*的变量：
@@ -200,7 +209,9 @@ let foo: Tuple = ("foo", ["bar"])
 ```
 
 ### 1、enum
+
 #### (1)、初始值
+
 枚举类型的每一个选项都可以带有一个初始值，和OC中的枚举类型一样，不同的是，Swift允许你指定这个初始值的类型，并且给每一个选项赋值。
 
 ```swift
@@ -222,6 +233,7 @@ print(black)
 ```
 
 #### (2)关联值
+
 Swift中的枚举类型的每一个选项都允许你传入一个变量作为它的关联值，你可以在`switch`它的时候使用这个变量。例如：
 
 ```swift
@@ -246,7 +258,9 @@ extension CSColor: CustomStringConvertible {
 let color = CSColor.rgb(255, 255, 255)
 // 0xFFFFFF
 ```
+
 #### *（3）Optional
+
 `Optional`在Swift中首先是个神奇的东西，其次是个非常重要的东西，理解它对于学习Swift重中之重。
 它的声明：
 
@@ -256,6 +270,7 @@ enum Optional<T> {
     case some(T)   // 有类型为T的某个值
 }
 ```
+
 `Optional`类型其实是一个枚举类型，它只有两个选项，要么是`none`，要么是某个`T`类型的值`some`。
 
 ##### （I）关于`?`
@@ -265,6 +280,7 @@ enum Optional<T> {
 ```swift
 var foo: Double？
 ```
+
 声明一个Double类型的变量，可以不赋值或者赋初值为`nil`，否则必须初始化它，如果一个变量不是`Optional`类型，那它永远不可能是`nil`。
 
 当我们在使用`?`解包的时候，它的执行过程应该为（伪代码）：
@@ -294,6 +310,7 @@ if bar == nil {
 }
 
 ```
+
 如果`bar = nil`，则返回`nil`，如果`bar != nil`，则返回`bar`的值，并且调用`lowercased`方法。当然返回值赋值给`x`，`x`也是`Optional`类型，因为它也可能为`nil`。
 
 ##### （II）关于`!`
@@ -310,6 +327,7 @@ print(x)
 ```
 
 ##### （III）关于`nil`
+
 OC中的`nil`代表空指针的意思，就是C中的`NULL`，它的定义为：
 
 ```swift
@@ -329,6 +347,7 @@ OC中的`nil`代表空指针的意思，就是C中的`NULL`，它的定义为：
   #endif
 #endif
 ```
+
 ```c++
 // C
 #define NULL (void *)0
@@ -341,6 +360,7 @@ Swift中的`nil`，并不是空指针的意思，因为Swift并不是一门纯�
 ```swift
 typealias nil = Optional.none 
 ```
+
 ### 2、struct & class
 
 Swift中的类都是引用类型，结构体都是值类型。
