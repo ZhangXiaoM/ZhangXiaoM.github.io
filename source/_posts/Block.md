@@ -82,7 +82,7 @@ int main(int argc, const char * argv[]) {
 
 ###二、block 存储位置
 
-block 在内存中有三个存储域，它的 `isa` 指针会描述它的*类对象*的存储域，上文中可看到 block 的存储在栈内存中，当我们声明一个全局 block 并且实现它的时候，block 就会被存储在静态和全局变量区。
+block 在内存中有三个存储域，它的 `isa` 指针会描述它的*类对象*的存储域，上文中可看到 block 的存储在栈内存中，当我们声明一个全局 block 并且实现它的时候，block 就会被存储在静态和全局区。
 
 ```objective-c
 void (^Block)(void) = ^(void){}; 
@@ -227,7 +227,11 @@ log 结果为：
 2018-06-04 16:44:44.582949+0800 XXX[12276:1661853] <__NSMallocBlock__: 0x100745a50>
 ```
 
-可以看出，在被 block 捕获之前对象 `foo`  的引用计数为 1，被捕获之后，引用计数增加到 3，并且 log 结果 block 被分配到堆内存（*NSMallocBlock*）中，此时我们可以猜测，对象 `foo` 分别被栈上的 block 强引用一次、堆上的 block 强引用一次，变量 `foo` 强引用一次，因此，在被 block 捕获之后，它的引用计数为 3。下面证明我们的猜测，如下代码：
+可以看出，在被 block 捕获之前对象 `foo`  的引用计数为 1，被捕获之后，引用计数增加到 3，并且 log 结果 block 被分配到堆内存（*NSMallocBlock*）中，此时我们可以猜测，对象 `foo` 分别被栈上的 block 强引用一次、堆上的 block 强引用一次，变量 `foo` 强引用一次，因此，在被 block 捕获之后，它的引用计数为 3。此时内存布局为：
+
+![](/var/folders/qd/7zbm76j916n2_dhjbm6nsm480000gn/T/abnerworks.Typora/image-20180604174901349.png)
+
+下面证明我们的猜测，如下代码：
 
 ```objective-c
 NSMutableArray *foo = [NSMutableArray new];
@@ -256,4 +260,80 @@ log 的结果为：
 从结果来看，此时的 block 依然在堆上， `foo` 变量仍然强引用对象，但是当出了中间的大括号作用域，`foo` 对象的引用计数变为 2，这说明，分配在栈上的 block 在出了作用域之后被弹出栈，同时栈内存中拷贝的 `foo` 变量也被 废弃（dispose）。这就是 block 捕获对象的真相。
 
 #### 3、捕获全局和静态变量
+
+注意：全局变量并不是类中的全局变量，类中的全局变量只是属于该类的成员变量，它会在运行时被保存到该对象成员变量列表中，对象是存储在堆内存中的，因此类中的全局变量也是存储在堆内存中的。此处说的全局变量是分配在*全局和静态变量区*的全局变量和静态变量，又分为已初始化的全局和静态变量区和未初始化的全局和静态变量区，此处不再多余赘述。
+
+如下代码：
+
+```objective-c
+int _foo = 3;
+int main(int argc, const char * argv[]) {
+    @autoreleasepool {
+        // insert code here...
+        void (^blk)(void) = ^(){
+            NSLog(@"%d", _foo);
+        };
+        blk();
+    }
+    return 0;
+}
+```
+
+此时，block 不会对全局变量和静态全局变量作任何多余的拷贝，而是在函数中直接访问全局和静态全局变量。因为，静态和全局数据区存储的内容在整个进程的生命周期内都有效，block 不用担心因为出了栈作用域而访问错误的内存的问题，也不用担心堆内存被释放而访问了 `nil ` 的问题。
+
+```c
+static void __main_block_func_0(struct __main_block_impl_0 *__cself) {
+	NSLog((NSString *)&__NSConstantStringImpl__var_folders_qd_7zbm76j916n2_dhjbm6nsm480000gn_T_main_d97d1e_mi_0, _foo);
+}
+```
+
+block 的实现函数也是直接访问了全局变量 `_foo` 。
+
+当捕获静态自动变量时：
+
+```objective-c
+int main(int argc, const char * argv[]) {
+    @autoreleasepool {
+        // insert code here...
+        static int foo = 3;
+        void (^blk)(void) = ^(){
+            NSLog(@"%d", foo);
+        };
+        blk();
+    }
+    return 0;
+}
+
+```
+
+静态自动变量和全局变量不同的是：它有作用域的概念，当出了当前作用域的时候，它就不能再被访问，但是它仍然被存储在静态和全局数据区，随着进程的销毁而销毁。因此，block 会生成一份对改变量地址的拷贝。
+
+```c
+struct __main_block_impl_0 {
+  struct __block_impl impl;
+  struct __main_block_desc_0* Desc;
+  int *foo;
+  __main_block_impl_0(void *fp, struct __main_block_desc_0 *desc, int *_foo, int flags=0) : foo(_foo) {
+    impl.isa = &_NSConcreteStackBlock;
+    impl.Flags = flags;
+    impl.FuncPtr = fp;
+    Desc = desc;
+  }
+};
+```
+
+```c
+impl.foo = &foo; 
+```
+
+访问的时候也是通过指针访问：
+
+```c
+static void __main_block_func_0(struct __main_block_impl_0 *__cself) {
+  int *foo = __cself->foo; // bound by copy
+  NSLog((NSString *)&__NSConstantStringImpl__var_folders_qd_7zbm76j916n2_dhjbm6nsm480000gn_T_main_3b4b26_mi_0, (*foo));
+}
+```
+
+#### 4、捕获 `__block` 修饰的变量
 
