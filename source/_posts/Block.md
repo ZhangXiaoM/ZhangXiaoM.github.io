@@ -4,11 +4,11 @@ date: 2018-05-31 15:19:11
 tags:
 ---
 
-作为 iOS 开发者，不管是初级还是高级，都应该知道并且熟练应用 OC 中的 block 语法，并且知道 block 会造成循环引用，但是大多数开发者并不知道循环引用产生的原理和如何正确的避免，而不是遇到 block 就用 weak 引用这种简单粗暴的方式解决问题。下面我将从 block 是什么？ block 如何捕获变量？ block 循环引用的原理等几个方面，分析 block 的实质。
+作为 iOS 开发者，不管是初级还是高级，都应该知道并且熟练应用 OC 中的 block 语法。大多数开发者都知道 block 会造成循环引用，但是很少有人会关心 block 造成循环引用的原理和如何正确的避免，而不是遇到 block 就用 weak 引用这种简单粗暴的方式解决问题。下面我将从 block 是什么？ block 如何捕获变量？ block 循环引用的原理等几个方面，分析 block 的实质。
 
 ### 一、Block 是什么？
 
-runtime 是大家耳熟能详的东西，从 runtime 中可以知道，OC 中所有的类都是用 C 或 C++ 结构体实现的，所有的方法都是通过动态绑定的方式在运行时调用的，具体内容可参见：[从runtime源码解析对象发送消息的动态性](https://zhangxiaom.github.io/2018/01/20/%E4%BB%8Eruntime%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90%E5%AF%B9%E8%B1%A1%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E7%9A%84%E5%8A%A8%E6%80%81%E6%80%A7/)。其实 block 的实现方式和 OC 类的实现方式是相同的，只不过 block 的实现不会像 OC 对象一样依赖于运行时动态库，它会在编译时被分配到栈内存或者分配到全局和静态数据区，但是运行时仍然会在某些情况下将分配到栈上的 block 拷贝到堆内存，以便于解决 block 被栈内存销毁的问题。以下内容将用 *Block* 关键字描述 block ”类“（即实现 block 的结构体），用 *block* 关键字描述 blcok “对象”。
+runtime 是大家耳熟能详的东西，从 runtime 中可以知道，OC 中所有的类都是用 C 或 C++ 结构体实现的，所有的方法都是通过动态绑定的方式在运行时调用的，具体内容可参见：[从runtime源码解析对象发送消息的动态性](https://zhangxiaom.github.io/2018/01/20/%E4%BB%8Eruntime%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90%E5%AF%B9%E8%B1%A1%E5%8F%91%E9%80%81%E6%B6%88%E6%81%AF%E7%9A%84%E5%8A%A8%E6%80%81%E6%80%A7/)。其实 block 的实现方式和 OC 类的实现方式是相同的，只不过 block 的实现不会像 OC 对象一样依赖于运行时动态库，它会在编译时被分配到栈内存或者分配到全局和静态数据区，但是运行时仍然会在某些情况下将分配到栈上的 block 拷贝到堆内存，以便于解决 block 被栈内存销毁的问题。以下内容将用 *Block* 关键字描述 block ”类“（即实现 block 的结构体），用 *block* 关键字描述 block ”对象“。
 
 当我们在 main 方法中创建一个 block，并且赋值给某个变量时，通过 `clang` 将 OC 代码编译成 C 代码，可以找到 Block ”类“中的内容为：
 
@@ -21,7 +21,7 @@ struct __block_impl {
 };
 ```
 
-一眼就看到了熟悉的 `isa` 指针，这是 OC 对象中独有的东西，而且从这个结构体也可以看出，block 并不是一个简简单单的函数指针，而是被包装为 OC 类的 Block 的实例。只不过此时的 block 被分配到栈内存。Block 中包含了一个 `isa` 指针，指向保存它所有信息的*类对象*，一个标志位 `Flags`，一个保留字段 `Reserved`，当然标志位和保留字段是 OC 源码中的一贯作风，它们没有特别明确的使用场景。`FuncPtr`  即是 Block 作为匿名函数的真相，它指向的函数即为调用 `block()` 时实际调用的函数。这是所有 Block 的通用实现，即所有 block 对象都会有的东西，但是当 block 捕获外部变量，或者被拷贝到堆内存的时候，它还需要一些其他实例和方法完成拷贝和保留被捕获的外部变量。
+一眼就看到了熟悉的 `isa` 指针，这是 OC 对象中独有的东西，而且从这个结构体也可以看出，block 并不是一个简简单单的函数指针，而是被包装为 OC 类的 Block 的实例。只不过此时实例化的 block 被分配到栈内存。Block 中包含了一个 `isa` 指针，指向保存它所有信息的*类对象*，一个标志位 `Flags`，一个保留字段 `Reserved`，当然标志位和保留字段是 OC 源码中的一贯作风，它们没有特别明确的使用场景。`FuncPtr`  即是 Block 作为匿名函数的真相，它指向的函数即为调用 `block()` 时实际调用的函数。这是 Block 的通用实现，即所有 block 对象都会有的东西，但是当 block 捕获外部变量，或者被拷贝到堆内存的时候，它还需要一些其他实例和方法完成拷贝和保留被捕获的外部变量。
 
 所以 Block 被实现为：
 
@@ -82,7 +82,7 @@ int main(int argc, const char * argv[]) {
 
 ###二、block 存储位置
 
-block 在内存中有三个存储域，它的 `isa` 指针会描述它的*类对象*的存储域，上文中可看到 block 的存储在栈内存中，当我们声明一个全局 block 并且实现它的时候，block 就会被存储在静态和全局区。
+block 在内存中有三个存储域，它的 `isa` 指针会描述它的存储域，上文中可看到 block 的存储在栈内存中，当我们声明一个全局 block 并且实现它的时候，block 就会被存储在静态和全局区。
 
 ```objective-c
 void (^Block)(void) = ^(void){}; 
@@ -134,7 +134,7 @@ struct __main_block_impl_0 {
 };
 ```
 
-此时，Block 中多了一个成员变量 `x`，并且初始化方法中多了一个参数 `_x`，默认赋值为成员变量 `x`。因此，当 block 捕获自动变量的时候，会生成一个相同类型的成员变量，用来存储该自动变量的 copy。为什么是 copy，而不是该变量？因为当 block 被赋值为实例变量时，该 block 的调用时机可能出了该自动变量的作用域，因此，需要 copy 一份，而不是直接访问。并且此时我们仅仅能访问 `x`，如果尝试改写它，编译器会给你发个 error，因为 `x`  仅仅是 block 的成员变量和自动变量的 copy，而不是自动变量本身，所以我们没有权利修改它，即使修改了，也是修改的 block 成员变量，而不会同步到外部变量，因为它是值类型。
+此时，Block 中多了一个成员变量 `x`，并且初始化方法中多了一个参数 `_x`，并且赋值给成员变量 `x`。因此，当 block 捕获自动变量的时候，会生成一个相同类型的成员变量，用来存储该自动变量的 copy。为什么是 copy，而不是该变量？因为当 block 被赋值为实例变量时，该 block 的调用时机可能出了该自动变量的作用域，那么，该自动变量就会因为被弹出栈而销毁，因此需要 copy 一份，而不是直接访问。并且此时我们仅仅能访问 `x`，如果尝试改写它，编译器会给你发个 error，因为 `x`  仅仅是 block 的成员变量和自动变量的 copy，而不是自动变量本身，所以我们没有权利修改它，即使修改了，也是修改的 block 成员变量，而不会同步到外部变量，因为它是值类型。
 
 ```c
 static void __main_block_func_0(struct __main_block_impl_0 *__cself) {
@@ -176,7 +176,7 @@ struct __main_block_impl_0 {
 };
 ```
 
-Block 结构体中也多了一个变量 `foo`，就像上文 1 一样，Block 中也会多一个变量用来保存它捕获的内容。但是不同的是，对象是引用类型，所以 Block 的中的变量是对指向可变数组的变量的 copy，而不是对对象的 copy，它是 `foo` 的别名，和 `foo` 指向同一块堆内存。用 C 语言的语法可表述为：Block 中的成员变量 `foo` 是对外部变量 `foo` 的拷贝，而不是对对象 `*foo` 的拷贝。
+Block 结构体中也多了一个变量 `foo`，就像上文 **1** 一样，Block 中也会多一个变量用来保存它捕获的内容。但是不同的是，对象是引用类型，所以 Block 的中的变量是对指向可变数组的变量的 copy，而不是对对象的 copy，它是 `foo` 的别名，和 `foo` 指向同一块堆内存。用 C 语言的语法可表述为：Block 中的成员变量 `foo` 是对指针 `foo` 的拷贝，而不是对对象 `*foo` 的拷贝。
 
 此时， `__main_block_desc_0` 结构体为：
 
@@ -227,9 +227,9 @@ log 结果为：
 2018-06-04 16:44:44.582949+0800 XXX[12276:1661853] <__NSMallocBlock__: 0x100745a50>
 ```
 
-可以看出，在被 block 捕获之前对象 `foo`  的引用计数为 1，被捕获之后，引用计数增加到 3，并且 log 结果 block 被分配到堆内存（*NSMallocBlock*）中，此时我们可以猜测，对象 `foo` 分别被栈上的 block 强引用一次、堆上的 block 强引用一次，变量 `foo` 强引用一次，因此，在被 block 捕获之后，它的引用计数为 3。此时内存布局为：
+可以看出，在被 block 捕获之前对象 `foo`  的引用计数为 1，被捕获之后，引用计数增加到 3，并且 log 结果可看到 block 被拷贝到堆内存（*NSMallocBlock*）中，此时我们可以猜测，对象 `foo` 分别被栈上的 block 强引用一次、堆上的 block 强引用一次，变量 `foo` 强引用一次，因此，在被 block 捕获之后，它的引用计数为 3。此时内存布局为：
 
-![](/var/folders/qd/7zbm76j916n2_dhjbm6nsm480000gn/T/abnerworks.Typora/image-20180604174901349.png)
+![](https://upload-images.jianshu.io/upload_images/5314152-0862ec404f661233.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 下面证明我们的猜测，如下代码：
 
@@ -257,11 +257,11 @@ log 的结果为：
     2018-06-04 16:59:57.620217+0800 XXX[14913:1696697] <__NSMallocBlock__: 0x100616990>
 ```
 
-从结果来看，此时的 block 依然在堆上， `foo` 变量仍然强引用对象，但是当出了中间的大括号作用域，`foo` 对象的引用计数变为 2，这说明，分配在栈上的 block 在出了作用域之后被弹出栈，同时栈内存中拷贝的 `foo` 变量也被 废弃（dispose）。这就是 block 捕获对象的真相。
+从结果来看，此时的 block 依然在堆上， `foo` 变量仍然强引用对象，但是当出了中间的大括号作用域，`foo` 对象的引用计数变为 2，这说明，分配在栈上的 block 在出了作用域之后被弹出栈，同时栈内存中拷贝的 `foo` 变量也被废弃（dispose），所以此时栈上的 block 不再强引用对象 `foo`，所以它的引用计数变为 2。这就是 block 捕获对象的真相。我们可以得出的结论是，被捕获的对象会随着 block 的拷贝而被拷贝到堆内存，随着 block 的销毁而销毁，因此即使 block 不像 OC 对象一样遵循 ARC 的内存管理方式，OC 也会帮我们管理它和它捕获的对象的内存。
 
 #### 3、捕获全局和静态变量
 
-注意：全局变量并不是类中的全局变量，类中的全局变量只是属于该类的成员变量，它会在运行时被保存到该对象成员变量列表中，对象是存储在堆内存中的，因此类中的全局变量也是存储在堆内存中的。此处说的全局变量是分配在*全局和静态变量区*的全局变量和静态变量，又分为已初始化的全局和静态变量区和未初始化的全局和静态变量区，此处不再多余赘述。
+注意：全局变量并不是类中的全局变量，类中的全局变量只是属于该类的成员变量，它会在运行时被保存到该对象成员变量列表中，对象是存储在堆内存中的，因此类中的全局变量也是存储在堆内存中的。此处说的全局变量是分配在*全局和静态变量区*的全局变量，又分为已初始化的全局和静态数据区和未初始化的全局和静态数据区，此处不再多余赘述。
 
 如下代码：
 
@@ -279,7 +279,7 @@ int main(int argc, const char * argv[]) {
 }
 ```
 
-此时，block 不会对全局变量和静态全局变量作任何多余的拷贝，而是在函数中直接访问全局和静态全局变量。因为，静态和全局数据区存储的内容在整个进程的生命周期内都有效，block 不用担心因为出了栈作用域而访问错误的内存的问题，也不用担心堆内存被释放而访问了 `nil ` 的问题。
+此时，block 不会对全局变量和静态全局变量作任何多余的拷贝，而是在函数中直接访问全局和静态全局变量。因为，静态和全局数据区存储的内容在整个进程的生命周期内都有效，block 不用担心作用域和野指针等等内存问题。
 
 ```c
 static void __main_block_func_0(struct __main_block_impl_0 *__cself) {
@@ -306,7 +306,7 @@ int main(int argc, const char * argv[]) {
 
 ```
 
-静态自动变量和全局变量不同的是：它有作用域的概念，当出了当前作用域的时候，它就不能再被访问，但是它仍然被存储在静态和全局数据区，随着进程的销毁而销毁。因此，block 会生成一份对改变量地址的拷贝。
+静态自动变量和全局变量不同的是：它有作用域的概念，当出了当前作用域的时候，它就不能再被访问，但是它仍然被存储在静态和全局数据区，随着进程的销毁而销毁。因此，block 会生成一份对该变量地址的拷贝。
 
 ```c
 struct __main_block_impl_0 {
@@ -336,4 +336,107 @@ static void __main_block_func_0(struct __main_block_impl_0 *__cself) {
 ```
 
 #### 4、捕获 `__block` 修饰的变量
+
+从上面的分析我们可以得到的结论是，当 block 捕获的内容为对象、全局变量、静态全局变量、静态自动变量时，我们都可以通过指针或者变量本身访问到它们的存储域，并且可以在随意修改它们（上面内容没涉及到在 block 内修改变量，可以自行尝试）。但是对于值类型的自动变量，我们不能在 block 内部修改它，具体原因上面也谈到了。OC 提供了一个 `__block` 关键字给开发者实现对自动变量的捕获和修改，那么当我们用 `__block` 修饰自动变量之后，block 对变量做了什么呢？如下代码：
+
+```objective-c
+int main(int argc, const char * argv[]) {
+    @autoreleasepool {
+        // insert code here...
+        __block int foo = 3;
+        void (^blk)(void) = ^(){
+            foo = 4;
+        };
+        blk();
+        foo = 5;
+    }
+    return 0;
+}
+```
+
+当变量 `foo` 用 `__block` 修饰之后，在 block 中修改它，编译器不会报错。
+
+此时，将上述代码编译成 C 代码后发现 block 中的实现中多了一个结构体：
+
+```c
+struct __Block_byref_foo_0 {
+  void *__isa;
+__Block_byref_foo_0 *__forwarding;
+ int __flags;
+ int __size;
+ int foo;
+};
+```
+
+又看到了老朋友 `isa`，因此我们可以认为 block 使用了 OC 类的结构来存储它捕获到的 `__block` 变量。令人诧异的是，这个结构体中多了一个 `__forwarding` 指针。
+
+此时的 Block：
+
+```c
+struct __main_block_impl_0 {
+  struct __block_impl impl;
+  struct __main_block_desc_0* Desc;
+  __Block_byref_foo_0 *foo; // by ref
+  __main_block_impl_0(void *fp, struct __main_block_desc_0 *desc, __Block_byref_foo_0 *_foo, int flags=0) : foo(_foo->__forwarding) {
+    impl.isa = &_NSConcreteStackBlock;
+    impl.Flags = flags;
+    impl.FuncPtr = fp;
+    Desc = desc;
+  }
+};
+```
+
+多了一个 `struct __Block_byref_foo_0` 类型的成员 `foo`。并且初始化方法多了一个参数，并且默认将传入参数 `_foo ` 的 `__forwarding)` 指针赋值给成员变量 `foo`。
+
+```c
+static void __main_block_func_0(struct __main_block_impl_0 *__cself) {
+  __Block_byref_foo_0 *foo = __cself->foo; // bound by ref
+  (foo->__forwarding->foo) = 4;
+}
+```
+
+block 同样也会用 `__forwarding` 指针去访问捕获的 `foo` 变量。
+
+即使出了 block 的作用域，block 仍然会用 `__forwarding` 访问 `foo` 变量。
+
+```c
+int main(int argc, const char * argv[]) {
+    /* @autoreleasepool */ { __AtAutoreleasePool __autoreleasepool; 
+
+        __attribute__((__blocks__(byref))) __Block_byref_foo_0 foo = {(void*)0,(__Block_byref_foo_0 *)&foo, 0, sizeof(__Block_byref_foo_0), 3};
+        void (*blk)(void) = ((void (*)())&__main_block_impl_0((void *)__main_block_func_0, &__main_block_desc_0_DATA, (__Block_byref_foo_0 *)&foo, 570425344));
+        ((void (*)(__block_impl *))((__block_impl *)blk)->FuncPtr)((__block_impl *)blk);
+        (foo.__forwarding->foo) = 5;
+    }
+    return 0;
+}
+```
+
+这段代码首先将 `foo` 变量封装为 `__Block_byref_foo_0` 类型的对象 `foo`，然后用对象 `foo` 实例化一个 block。令人费解的是这行代码：
+
+```c
+(foo.__forwarding->foo) = 5;
+```
+
+因为此时，已经出了 block 的作用域，但是仍然用对象 `foo` 访问和修改 `foo` 变量。而且，和捕获自动变量不同的是，block 的实现中多了 `copy` 和 `dispose` 函数：
+
+```c
+static void __main_block_copy_0(struct __main_block_impl_0*dst, struct __main_block_impl_0*src) {
+    _Block_object_assign((void*)&dst->foo, (void*)src->foo, 8/*BLOCK_FIELD_IS_BYREF*/);
+}
+
+static void __main_block_dispose_0(struct __main_block_impl_0*src) {
+    _Block_object_dispose((void*)src->foo, 8/*BLOCK_FIELD_IS_BYREF*/);
+}
+```
+
+之前说过，当 block 满足被拷贝进堆内存的条件时，它才会实现这两个方法，来管理内存。并且此时函数的关键字是 `BLOCK_FIELD_IS_BYREF`，这说明当 block 捕获 `__block` 修饰的变量时，block 也会被拷贝到堆内存，block 会通过枚举值 `BLOCK_FIELD_IS_BYREF` 来区分拷贝的内容，并且管理内存。此时的内存布局如下所示：
+
+![](https://upload-images.jianshu.io/upload_images/5314152-b95d42dfdd257763.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+block 被拷贝到堆内存，并且 `foo` 对象作为 block 的成员变量也被拷贝到堆内存，此时栈中的 `foo` 对象和堆中的 `foo` 对象的 `__fowarding` 指针都指向了堆中的 `foo` 对象，`__block` 就是通过这种方式完成对值类型自动变量的捕获，所以即使自动变量 `foo` 被弹出栈，block 仍然可以修改它， 自从变量被拷贝的那一刻起，无论在 block 中，还是 block 外部，对它的访问和修改全部都是堆内存中的那一份。当 block 被销毁时，拷贝的内容也同时被释放。
+
+
+
+### 四、 block 循环引用
 
