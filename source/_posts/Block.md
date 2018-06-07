@@ -53,7 +53,7 @@ emm，一个保留字段，一个保存 block 大小的变量`Block_size` ，之
 
 当我们创建一个 block 时，
 
-```objective-c
+```objc
 typedef void (^Block)(void);
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
@@ -84,7 +84,7 @@ int main(int argc, const char * argv[]) {
 
 block 在内存中有三个存储域，它的 `isa` 指针会描述它的存储域，上文中可看到 block 的存储在栈内存中，当我们声明一个全局 block 并且实现它的时候，block 就会被存储在静态和全局区。
 
-```objective-c
+```objc
 void (^Block)(void) = ^(void){}; 
 ```
 
@@ -110,10 +110,10 @@ impl0.isa = &_NSConcreteGlobalBlock;
 
 如下代码，block 捕获外部变量 `x`：
 
-```c
+```objc
 int x = 0;
 Block blk0 = ^(void){
-	NSLog(@"%d", x);
+    NSLog(@"%d", x);
 };
 blk0();
 ```
@@ -152,10 +152,10 @@ static void __main_block_func_0(struct __main_block_impl_0 *__cself) {
 
 例如：
 
-```objective-c
+```objc
 NSMutableArray *foo = [NSMutableArray new];
 Block blk0 = ^(void){
-	[foo addObject:@""];
+    [foo addObject:@""];
 };
 blk0();
 ```
@@ -209,7 +209,7 @@ static void __main_block_dispose_0(struct __main_block_impl_0*src) {
 
 下面的代码可以验证 block 此时被拷贝到堆内存。
 
-```objective-c
+```objc
 NSMutableArray *foo = [NSMutableArray new];
 NSLog(@"%ld", CFGetRetainCount((__bridge CFTypeRef)(foo)));
 void (^blk0)(void) = ^(void){
@@ -221,7 +221,7 @@ NSLog(@"%@",blk0);
 
 log 结果为：
 
-```objective-c
+```objc
 2018-06-04 16:44:44.581703+0800 XXX[12276:1661853] 1
 2018-06-04 16:44:44.582176+0800 XXX[12276:1661853] 3
 2018-06-04 16:44:44.582949+0800 XXX[12276:1661853] <__NSMallocBlock__: 0x100745a50>
@@ -233,7 +233,7 @@ log 结果为：
 
 下面证明我们的猜测，如下代码：
 
-```objective-c
+```objc
 NSMutableArray *foo = [NSMutableArray new];
 void (^blk0)(void);
 NSLog(@"%ld", CFGetRetainCount((__bridge CFTypeRef)(foo)));
@@ -250,11 +250,11 @@ NSLog(@"%@",blk0);
 
 log 的结果为：
 
-```objective-c
+```objc
 2018-06-04 16:58:09.573400+0800 XXX[13849:1684686] 1
 2018-06-04 16:58:09.576588+0800 XXX[13849:1684686] 3
 2018-06-04 16:58:09.576820+0800 XXX[13849:1684686] 2
-    2018-06-04 16:59:57.620217+0800 XXX[14913:1696697] <__NSMallocBlock__: 0x100616990>
+2018-06-04 16:59:57.620217+0800 XXX[14913:1696697] <__NSMallocBlock__: 0x100616990>
 ```
 
 从结果来看，此时的 block 依然在堆上， `foo` 变量仍然强引用对象，但是当出了中间的大括号作用域，`foo` 对象的引用计数变为 2，这说明，分配在栈上的 block 在出了作用域之后被弹出栈，同时栈内存中拷贝的 `foo` 变量也被废弃（dispose），所以此时栈上的 block 不再强引用对象 `foo`，所以它的引用计数变为 2。这就是 block 捕获对象的真相。我们可以得出的结论是，被捕获的对象会随着 block 的拷贝而被拷贝到堆内存，随着 block 的销毁而销毁，因此即使 block 不像 OC 对象一样遵循 ARC 的内存管理方式，OC 也会帮我们管理它和它捕获的对象的内存。
@@ -265,7 +265,7 @@ log 的结果为：
 
 如下代码：
 
-```objective-c
+```objc
 int _foo = 3;
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
@@ -283,7 +283,7 @@ int main(int argc, const char * argv[]) {
 
 ```c
 static void __main_block_func_0(struct __main_block_impl_0 *__cself) {
-	NSLog((NSString *)&__NSConstantStringImpl__var_folders_qd_7zbm76j916n2_dhjbm6nsm480000gn_T_main_d97d1e_mi_0, _foo);
+  NSLog((NSString *)&__NSConstantStringImpl__var_folders_qd_7zbm76j916n2_dhjbm6nsm480000gn_T_main_d97d1e_mi_0, _foo);
 }
 ```
 
@@ -291,7 +291,7 @@ block 的实现函数也是直接访问了全局变量 `_foo` 。
 
 当捕获静态自动变量时：
 
-```objective-c
+```objc
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         // insert code here...
@@ -339,7 +339,7 @@ static void __main_block_func_0(struct __main_block_impl_0 *__cself) {
 
 从上面的分析我们可以得到的结论是，当 block 捕获的内容为对象、全局变量、静态全局变量、静态自动变量时，我们都可以通过指针或者变量本身访问到它们的存储域，并且可以在随意修改它们（上面内容没涉及到在 block 内修改变量，可以自行尝试）。但是对于值类型的自动变量，我们不能在 block 内部修改它，具体原因上面也谈到了。OC 提供了一个 `__block` 关键字给开发者实现对自动变量的捕获和修改，那么当我们用 `__block` 修饰自动变量之后，block 对变量做了什么呢？如下代码：
 
-```objective-c
+```objc
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         // insert code here...
@@ -454,7 +454,7 @@ block 被拷贝到堆内存，并且 `foo` 对象作为 block 的成员变量也
 
 关于 `weak` 关键字的特性不是我们本文讨论的重点，下面的论述默认大家对 `weak` 关键字的特性有一定的见解。上文说了，block 捕获对象的时候会生成一个引用该对象的变量的[别名](https://zh.wikipedia.org/wiki/%E5%88%AB%E5%90%8D_(%E8%AE%A1%E7%AE%97) )，此别名和外部变量具有相同的内存管理语义。因此，当 block 捕获 `weak` 变量引用的对象时，实际上生成的别名仍然是具有 `weak` 特质的。如下代码：
 
-```objective-c
+```objc
 id foo = [NSMutableArray new];
 __weak id bar = foo;
 void (^blk)(void) = ^(){
@@ -467,9 +467,9 @@ blk();
 
 ![](https://upload-images.jianshu.io/upload_images/5314152-f44da8c134a5824f.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
-因此，此时的 block 不会强引用 `NSMutableArray` 对象，当 `foo` 对对象的引用断开之后，对象就会被释放。因为所谓内存管理语义 `weak`、`strong` 等都是 OC 语言特有的东西，我们没有办法将带有这个关键字的 OC 代码编译为 C 语言，但是我们可以证明一下上述结论：
+因此，此时的 block 不会强引用 `NSMutableArray` 对象，当 `foo` 对对象的引用断开之后，对象就会被释放。下面的代码可证明上述结论：
 
-```objective-c
+```objc
 void (^blk)(void);
 {
     id foo = [NSMutableArray new];
@@ -483,7 +483,7 @@ blk();
 
 执行结果为：
 
-```objective-c
+```objc
 2018-06-06 17:44:45.199394+0800 XXX[49068:7235369] (null)
 ```
 
@@ -493,7 +493,7 @@ blk();
 
 像上文中的情况，假如我们使用了 `weak` 解决循环引用，就会造成一些问题，就是被捕获的对象会被释放，那么我们就会得到错误的结果，很多人会告诉我们使用 weak-strong dance 解决这类问题，但是真的有效吗？如下代码：
 
-```objective-c
+```objc
 void (^blk)(void);
 {
     id foo = [NSMutableArray new];
@@ -509,7 +509,7 @@ NSLog(@"%@",blk);
 
 程序执行结果为：
 
-```objective-c
+```objc
 2018-06-06 18:06:58.564651+0800 XXX[49189:7362233] (null)
 2018-06-06 18:06:58.565225+0800 XXX[49189:7362233] <__NSMallocBlock__: 0x100653040>
 ```
