@@ -1,5 +1,5 @@
 ---
-title: 从runtime源码解析发送消息的动态性
+title: 从runtime源码解析消息发送的动态性
 date: 2018-01-20 11:30:55
 tags:
 ---
