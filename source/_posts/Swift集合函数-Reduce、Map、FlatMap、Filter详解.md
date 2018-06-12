@@ -1,7 +1,7 @@
 ---
 title: 'Swift集合函数:Reduce、Map、FlatMap、Filter详解'
 date: 2018-01-02 11:20:58
-tags:
+tags: iOS API 详解
 ---
 
 ## Reduce

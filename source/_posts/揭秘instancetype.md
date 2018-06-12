@@ -1,7 +1,7 @@
 ---
 title: 揭秘instancetype
 date: 2018-04-19 14:37:06
-tags:
+tags: iOS API 详解
 ---
 
 苹果官方会建议我们用 `instancetype` 类型代替 `id` 类型作为某个类的初始化方法的返回值。以下内容摘自[Adopting Modern Objective-C](https://developer.apple.com/library/content/releasenotes/ObjectiveC/ModernizationObjC/AdoptingModernObjective-C/AdoptingModernObjective-C.html#//apple_ref/doc/uid/TP40014150-CH1-SW11):

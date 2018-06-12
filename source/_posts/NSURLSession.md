@@ -1,7 +1,7 @@
 ---
 title: NSURLSession
 date: 2015-08-21 17:19:55
-tags:
+tags: iOS API 详解
 ---
 
 本文翻译自 https://www.raywenderlich.com/110458/nsurlsession-tutorial-getting-started   

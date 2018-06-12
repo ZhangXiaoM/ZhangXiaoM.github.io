@@ -1,7 +1,7 @@
 ---
 title: ARC内存管理以及循环引用
 date: 2018-01-02 16:25:52
-tags:
+tags: iOS 内存管理
 ---
 
 ARC:"Automatic Reference Counting"，自动引用计数。Swift语言延续了OC的做法，也是利用ARC机制进行内存管理，和OC的ARC一样，当一些类的实例不在需要的时候，ARC会释放它们的内存。但是，在少数情况下，ARC需要知道你的代码之间的关系才能更好的为你管理内存，和OC一样，Swift中的ARC也存在循环引用导致内存泄露的情况。    

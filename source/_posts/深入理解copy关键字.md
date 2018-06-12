@@ -1,7 +1,7 @@
 ---
 title: 深入理解copy关键字
 date: 2017-08-30 10:26:27
-tags:
+tags: iOS 内存管理
 ---
 
 我们在声明 `NSString`、`NSArray `等具有可变子类的属性时，一般都会用 `copy` 关键字来指定它的特质。
