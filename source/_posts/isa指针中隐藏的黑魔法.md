@@ -80,7 +80,7 @@ _objc_isTaggedPointer(const void *ptr)
 }
 ```
 
-通过上面的函数判断指针是不是标记指针，如果是标记指针，会用相应的函数取出它存储的值：
+通过上面的函数可看出，runtime 通过使用[掩码](https://zh.wikipedia.org/wiki/%E6%8E%A9%E7%A0%81)判断指针是不是标记指针，如果是标记指针，会用相应的函数取出它存储的值：
 
 ```c
 static inline uintptr_t
@@ -119,3 +119,116 @@ runtime 会根据这些枚举值来判断一个 Tagged Pointer 是哪种类型�
 
 `isa` 指针也是指针，在 64 位架构下也需要 8 个字节的存储空间，而在原有的 32 位架构的设计中，`isa` 只需要 4 个字节的存储空间， 因此在保持原有的设计下，`isa` 指针同样会有 4 个字节的内存被浪费。就像 Tagged Pointer 一样，`isa` 也不再仅仅是一个指针，而是一个 `nonpointer`。
 
+`isa` 指针的一些位仍然被编码为指向类对象的指针，但是被编码为指针的位不是全部的 64 位地址空间，iOS 和 Mac OS 都是对 `isa` 指针做了相同的处理。和标记指针一样，`isa` 也使用掩码的形式最大程度使用指针的全部地址空间。runtime 会用 `isa` 的其他额外的位来存储对象的其他数据，例如引用计数，是否被弱引用等等。
+
+这样就可以避免用额外的数据结构存储每个对象的引用计数和弱引用情况，也可以减少对象 `-retain`，`-release`，`-alloc`，`-dealloc` 时通过查表修改和获取引用计数的时间。
+
+那么 `isa` 的 64 位地址空间都用来存储什么数据了呢？记住，看源码，而不是百度或者google。
+
+```c
+union isa_t 
+{
+    isa_t() { }
+    isa_t(uintptr_t value) : bits(value) { }
+
+    Class cls;
+    uintptr_t bits;
+    
+#   define ISA_MASK        0x0000000ffffffff8ULL
+#   define ISA_MAGIC_MASK  0x000003f000000001ULL
+#   define ISA_MAGIC_VALUE 0x000001a000000001ULL
+    struct {
+        // LSB
+        uintptr_t nonpointer        : 1;
+        uintptr_t has_assoc         : 1;
+        uintptr_t has_cxx_dtor      : 1;
+        uintptr_t shiftcls          : 33; // MACH_VM_MAX_ADDRESS 0x1000000000
+        uintptr_t magic             : 6;
+        uintptr_t weakly_referenced : 1;
+        uintptr_t deallocating      : 1;
+        uintptr_t has_sidetable_rc  : 1;
+        uintptr_t extra_rc          : 19;
+        // MSB
+        // bits + RC_ONE is equivalent to extra_rc + 1
+#       define RC_ONE   (1ULL<<45)
+		// RC_HALF is the high bit of extra_rc (i.e. half of its range)
+#       define RC_HALF  (1ULL<<18)
+    };
+}
+```
+
+可以看到 `isa` 被定义为一个联合体，其中 `Class` 类型的变量 `cls` 指向类对象，还有一个无名位域指定了 64 位地址空间的存储内容。从最低有效位到最高有效位依次表示：
+
+- `nonpointer`：1 bit，置位（1）代表是 `nonpointer` ，复位（0）代表是原始的 `isa` 指针。
+
+- `has_assoc`：1bit，对象是否被变量引用过。没有被引用的对象会很快被释放。
+
+- `has_cxx_dtor`：1bit，对象有一个 c++ 或者 ARC 的析构函数，没有析构函数的对象会被很快释放。
+
+- `shiftcls`：33 bit，这 33 位地址空间存储的就是真正的指向堆内存的地址。
+
+- `magic`：6 bit，用来给调试器区分该对象是真正的对象还是未初始化过的垃圾内存。
+
+- `weakly_referenced`：1 bit，对象是否被弱引用。
+
+- `deallocating`：1 bit，对象正在被释放。
+
+- `has_sidetable_rc`：1 bit，对象的引用计数太大，要用额外的数据结构存储。
+
+- `extra_rc`：19 bit，如果对象的引用计数超过 1，就用这 19 位是用来存储额外的引用计数，最大可以表示的数字为 2^19 - 1。也就是当一个对象的引用计数低于 2 ^ 19 时就用这 19 位来存储，否则的话用额外的数据结构存储。例如对象的引用计数为 6，那么 extra_rc = 5。
+
+这就是全部的 64 位地址空间的存储内容。宏定义 `ISA_MASK` 作为指向类对象的指针的掩码。`0x0000000ffffffff8ULL` 正是第 3 到第 35 位的掩码值，`ISA_MAGIC_MASK` 是 6 位 `magic` 的掩码，当 `isa &ISA_MAGIC_MASK == ISA_MAGIC_VALUE ` 时，表明该对象是被初始化过的对象。（我猜 `0x000001a000000001ULL` 的意义和命名一样，magic value...）
+
+`RC_ONE` 表示 `extra_rc` 的最低位，因此 `bits + RC_ONE = extra_rc + 1`。`RC_HALF` 表示 `extra_rc` 范围的一半，此处为 2 ^ 19 / 2。
+
+如何获取一个对象的引用计数呢？
+
+```c
+inline uintptr_t objc_object::rootRetainCount()
+{
+    if (isTaggedPointer()) return (uintptr_t)this;
+
+    sidetable_lock();
+    isa_t bits = LoadExclusive(&isa.bits);
+    ClearExclusive(&isa.bits);
+    if (bits.nonpointer) {
+        uintptr_t rc = 1 + bits.extra_rc;
+        if (bits.has_sidetable_rc) {
+            rc += sidetable_getExtraRC_nolock();
+        }
+        sidetable_unlock();
+        return rc;
+    }
+
+    sidetable_unlock();
+    return sidetable_retainCount();
+}
+```
+
+objc_object 命名空间的内联函数，当 `isa` 指针是 Tagged Pointer 时，直接返回该指针的值，因为它不受 ARC 内存管理。当 `isa` 指针是 `nonpointer` 时，对象的引用计数为 1 + `extra_rc`，如果 `extra_rc` 的地址空间不足以存储对象的引用计数，则用 hash 表存储额外的引用计数，将三部分的结果求和即为对象的引用计数。
+
+```c
+uintptr_t
+objc_object::sidetable_retainCount()
+{
+    SideTable& table = SideTables()[this];
+
+    size_t refcnt_result = 1;
+    
+    table.lock();
+    RefcountMap::iterator it = table.refcnts.find(this);
+    if (it != table.refcnts.end()) {
+        // this is valid for SIDE_TABLE_RC_PINNED too
+        // 右移是因为设置的时候做了左移操作，我也不知道为什么要左移
+        refcnt_result += it->second >> SIDE_TABLE_RC_SHIFT;
+    }
+    table.unlock();
+    return refcnt_result;
+}
+```
+
+对象的引用计数存储在一个以 `this` 指针为键，引用计数为值的 Map 中，该函数即为获取非 `nonpointer` 的对象的引用计数。因此，如果 `isa` 指针是 `nonpointer`，那么就节省了这个存储引用计数的 Map，同时也减少了管理对象生命周期时查表的时间。
+
+#### 总结
+
+小小的 `isa` 指针就做了这么多不可思议的事情，可见 apple 对空间和时间的优化多么登峰造极，当然知道这些并不会提高我们的业务能力，但是我们有必要知道 runtime 动态库为整个 objc 的对象系统提供了多么大的支撑，这也是 objc 的核心能力。
