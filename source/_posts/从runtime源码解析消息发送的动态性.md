@@ -19,8 +19,8 @@ struct SuperFoo {
 
 struct Foo {
     int val;
-    // 指向自己的指针
-    struct Foo *isa;
+    // 指向类对象的指针
+    void *isa;
     // 指向父类的指针
     struct SuperFoo *superFoo;
     // 声明一个指针变量 sum，它的类型为具有一个 int 类型返回值，两个 int 类型参数的函数。
@@ -42,7 +42,6 @@ int main(int argc, const char * argv[]) {
     pFoo = (PFoo)malloc(sizeof(PFoo));
     // init 初始化操作
     pFoo -> val = 4;
-    pFoo -> isa = pFoo;
     // 将函数 sum() 赋值给 pFoo 的成员变量 sum
     pFoo -> sum = sum;
     // 可以创建一个父类对象，让 superFoo 指向父类对象
