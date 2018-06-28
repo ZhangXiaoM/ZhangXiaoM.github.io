@@ -151,7 +151,7 @@ union isa_t
         // MSB
         // bits + RC_ONE is equivalent to extra_rc + 1
 #       define RC_ONE   (1ULL<<45)
-		// RC_HALF is the high bit of extra_rc (i.e. half of its range)
+        // RC_HALF is the high bit of extra_rc (i.e. half of its range)
 #       define RC_HALF  (1ULL<<18)
     };
 }
@@ -232,3 +232,9 @@ objc_object::sidetable_retainCount()
 #### 总结
 
 小小的 `isa` 指针就做了这么多不可思议的事情，可见 apple 对空间和时间的优化多么登峰造极，当然知道这些并不会提高我们的业务能力，但是我们有必要知道 runtime 动态库为整个 objc 的对象系统提供了多么大的支撑，这也是 objc 的核心能力。
+
+
+
+#### 本文参考
+
+http://www.sealiesoftware.com/blog/archive/2013/09/24/objc_explain_Non-pointer_isa.html
