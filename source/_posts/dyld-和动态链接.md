@@ -20,22 +20,42 @@ tags:
 
 - 链接。链接分为动态链接和静态链接，链接器将所有的目标文件和系统目标文件组合起来，生成能在机器上运行的可执行文件。iOS 中为 `.ipa`，Windows 中为 `.exe`，Android 中为 `.apk` 等等。
 
-例如一段 c 代码：
+例如两段 c 代码：
 ```c
+// mian.c
 #include <stdio.h>
+#include "sum.h"
 
 int main(int argc, const char * argv[]) {
-    // insert code here...
-    printf("Hello, World!\n");
+    
+    int arr[2] = {1, 2};
+    sum(arr, 2);
     return 0;
 }
 ```
 
-`stdio` 是 c 语言输入输出标准库，`printf()` 是 `stdio` 的库函数，这段代码的编译过程为：
+```c
+// sum.h
+int sum(int *a, int n);
+// sum.c
+int sum(int *a, int n) {
+    
+    int sum = 0;
+    
+    for (int i = 0; i < n; ++i) {
+        sum += a[i];
+    }
+    
+    return sum;
+}
+```
+
+
 
 ![](https://upload-images.jianshu.io/upload_images/5314152-0407120a690cc51e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 可以看出 `stdio` 库是可以被单独编译成目标文件的，我们的源程序通过链接的形式使用 `stdio` 库中的源程序。
 
-### 二、静态链接和动态链接
+### 二、链接
 
+链接就是上面的例子那样，将若干个目标文件组合成单一可执行文件的过程，这个文件被加载到内存中并执行。链接发生的时机可能为：编译时（源代码被翻译成机器代码时），加载时（程序被加载到内存中时），运行时。
