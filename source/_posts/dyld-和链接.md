@@ -1,7 +1,7 @@
 ---
-title: dyld 和动态链接
-date: 2018-06-28 17:46:31
-tags: 
+title: dyld 和链接
+date: 2018-07-01 17:46:31
+tags: 编译和链接
 ---
 
 代码从写完到编译到运行之间发生了什么？我们的程序是如何在设备上执行的？为什么我们代码中没有的库函数也能执行？在工作中我们可能常常会疑惑这样的问题，下面我们来探究一下这些问题。在阅读本文之前，需要充分了解进程的概念：[并发编程之进程](https://zhangxiaom.github.io/2018/06/12/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E4%B9%8B%E8%BF%9B%E7%A8%8B/)。
@@ -16,7 +16,7 @@ tags:
 
 - 编译。编译器将 `*.i` 文件编译成 ASCII 汇编语言文件 `*.s`。
 
-- 汇编。汇编器将 `*.s` 文件汇编成一个可重定位的二进制目标文件`*.o`。
+- 汇编。汇编器将 `*.s` 文件汇编成一个可重定位的二进制目标文件`*.o`，Mac OS 和 iOS 中被称为 Mach-O文件。
 
 - 链接。链接分为动态链接和静态链接，链接器将所有的目标文件和系统目标文件组合起来，生成能在机器上运行的可执行文件。iOS 中为 `.ipa`，Windows 中为 `.exe`，Android 中为 `.apk` 等等。
 
@@ -155,11 +155,30 @@ int main(int argc, const char * argv[]) {
 
 ### 三、dyld
 
-dyld (dynamic loader and linker) 是 iOS 和 Mac OS 系统中的动态加载器和链接器，它负责共享库的动态链接，比如 libobjc.A.dylib，Foundation.framework 等等。加载和链接是在程序启动时，`main()` 函数之前做的，dyld 主要做了什么？大致分为以下几步：
+dyld (dynamic loader and linker) 是 iOS 和 Mac OS 系统中的动态加载器和链接器，它负责共享库的动态链接，比如 libobjc.A.dylib，Foundation.framework 等等。加载和链接是在程序启动时，`main()` 函数之前做的，dyld 主要做了什么？
+
+打印一下堆栈信息如下：
+
+```c
+* thread #1, stop reason = breakpoint 1.1
+  * frame #0: 0x00007fff5e29794a libSystem.B.dylib`libSystem_initializer
+    frame #1: 0x000000010001ca7a dyld`ImageLoaderMachO::doModInitFunctions(ImageLoader::LinkContext const&) + 420
+    frame #2: 0x000000010001ccaa dyld`ImageLoaderMachO::doInitialization(ImageLoader::LinkContext const&) + 40
+    frame #3: 0x00000001000181cc dyld`ImageLoader::recursiveInitialization(ImageLoader::LinkContext const&, unsigned int, char const*, ImageLoader::InitializerTimingList&, ImageLoader::UninitedUpwards&) + 330
+    frame #4: 0x000000010001815f dyld`ImageLoader::recursiveInitialization(ImageLoader::LinkContext const&, unsigned int, char const*, ImageLoader::InitializerTimingList&, ImageLoader::UninitedUpwards&) + 221
+    frame #5: 0x0000000100017302 dyld`ImageLoader::processInitializers(ImageLoader::LinkContext const&, unsigned int, ImageLoader::InitializerTimingList&, ImageLoader::UninitedUpwards&) + 134
+    frame #6: 0x0000000100017396 dyld`ImageLoader::runInitializers(ImageLoader::LinkContext const&, ImageLoader::InitializerTimingList&) + 74
+    frame #7: 0x0000000100008521 dyld`dyld::initializeMainExecutable() + 126
+    frame #8: 0x000000010000d239 dyld`dyld::_main(macho_header const*, unsigned long, int, char const**, char const**, char const**, unsigned long*) + 7242
+    frame #9: 0x00000001000073d4 dyld`dyldbootstrap::start(macho_header const*, int, char const**, long, macho_header const*, unsigned long*) + 453
+    frame #10: 0x00000001000071d2 dyld`_dyld_start + 54
+```
+
+dyld 的工作大致分为以下几步：
 
 - 动态链接器自身就是一个共享目标文件，dyld 会首先将他自己加载进内存中并运行。
 
-- 递归的向进程的内存空间中加载动态库。
+- 使用 `ImageLoader` 递归的向进程的内存空间中加载动态库。
 
 - 重定向对动态库中符号的引用，完成链接工作。
 
@@ -173,7 +192,7 @@ dyld (dynamic loader and linker) 是 iOS 和 Mac OS 系统中的动态加载器�
 
 总结一下就是，当进程开始时，以 iOS 为例，就是点击了某个应用程序，dyld 会将可执行文件和它的共享库加载到内存中，将跨库 C 函数和变量引用链接到一起，然后在 `main` 函数开始执行。因此，从启动应用程序到我们写的代码开始执行，这段时间内都是 dyld 的工作。
 
-注意：`main()` 函数执行之前，进程都是被内核管理的，直到 `main()` 函数，进程才开始运行在用户态。
+注意：dyld 工作时，进程都是被内核管理的，直到可执行文件和动态库被链接并且加载完成，进程才开始运行在用户态。
 
 #### 3.1 共享缓存
 
@@ -187,13 +206,57 @@ dyld (dynamic loader and linker) 是 iOS 和 Mac OS 系统中的动态加载器�
 
 共享缓存的优化会节省一半的程序启动时间，也能为 iOS  设备节省 1MB 的内存。该结论由 runtime 源码的维护者：Hamster Emporium 的[这篇文章](http://www.sealiesoftware.com/blog/archive/2009/09/01/objc_explain_Selector_uniquing_in_the_dyld_shared_cache.html)给出。
 
+#### 3.2  +load 
 
+当 dyld 干完自己要干的事之后，进程就由内核态切换为用户态，这时候，运行时库 libobjc.dylib 会初始化自己，然后向所有静态链接进可执行文件的类对象发送 `+load` 消息，表示该类对象已经被加载进内存。对于动态链接的共享库中的类对象，runtime 会在共享库加载进进程的地址空间之后尽早的发送 `+load` 消息。
 
+因此，无论动态链接还是静态链接的目标模块，我们都可以认为 runtime 发送给类对象的第一条消息就是 `+load`。
 
+从 runtime 源码[`objc-loadmethod.mm`](http://opensource.apple.com/source/objc4/objc4-532.2/runtime/objc-loadmethod.mm) 中，我们可以找到 `+load` 方法的调用时机，以及它在继承关系的类中的调用情况：
 
+> call_load_methods （函数名）
+>
+> Call all pending class and category +load methods. （调用所有类和分类的 +load 方法）
+>
+> Class +load methods are called superclass-first. （先调用父类的 +load，在调用子类的）
+>
+> Category +load methods are not called until after the parent class's +load.（先调用类的 +load，在调用分类的）
+>
+> Re-entrant calls do nothing; the outermost call will finish the job. （重复调用该方法无效，最外层的调用将完成所有工作）
 
+因此，我们可以得到类对象的 `+load` 方法的调用时机和调用顺序，以及每个类对象只会被发送一次 `+load` 消息。
 
+做个试验验证一下，创建几个类为：`Father`、`Son`、`GrandSon`、`Father+Extension`，然后重写每个类的 `+load`，函数的实现打印一句话 `XXX(类) load`，并且在 `Father` 的 `+load` 和 `main()` 函数分别打个断点，运行程序，程序会先在 `+load` 方法处中断，然后才在 `main()` 函数中断，并且 log 结果为：
 
+```c
+father load
+son load
+grandson load
+extension load
+```
 
+符合理论结果。
 
+iOS 开发中的 **Method Swizzling**，为什么要在 `+load` 方法中做？
 
+熟悉 runtime 的同学一定知道 runtime 会将函数实现成 C++ 中虚函数表的形式，在运行时调用，参考我的另一篇文章：[从runtime源码解析消息发送的动态性](https://zhangxiaom.github.io/2018/01/20/%E4%BB%8Eruntime%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90%E6%B6%88%E6%81%AF%E5%8F%91%E9%80%81%E7%9A%84%E5%8A%A8%E6%80%81%E6%80%A7/)。从上文我们知道了 `+load` 方法的调用时机是类对象加载到进程地址空间的之后的第一时间，也就是该类对象接收到的第一条消息，因此，此时做方法交换是修改类对象的方法列表的最好时机。其实 **Method Swizzling** 的实质有点类似于对符号引用的重定向，当然要在类对象加载的时候完成。
+
+### 四、程序启动时间
+
+从上面我们的分析，可以看到我们的应用程序从启动到代码的执行之间经历了多少事，链接和加载也是影响程序启动的主要因素，其中 apple 对 dyld 的优化-共享缓存可以帮我们很大程度的提高应用的启动时间，但是我们自己也应该承担一部分责任：
+
+- 删除项目中不再使用的动态库，因为链接和加载它们需要很多的时间和空间。
+
+- 删除项目中不再使用的类和分类，因为加载它们到进程的地址空间是在启动时完成的。
+
+- 尽量少的使用 **Method Swizzling**，因为方法交换需要遍历方法列表，会拖慢 `+load` 方法的执行，这也是在启动的时候完成的。
+
+- 使用静态库代替非系统库的动态库，能节省一部分链接的时间，但是多了加载的时间，总体会提升一些。
+
+等等。
+
+ 另外：删除不再使用的静态库，即使它不会拖慢启动时间，但是它仍然会被编译成目标文件而占用磁盘空间。
+
+### 五、总结
+
+emm，老规矩，知道这些并不会提高我们的业务能力，但是，你现在知道平时开发中遇到的 Apple Mach-O Linker Error 是什么原因了吗？知道影响程序启动时间的是谁了吗？知道 `Redefinition of 'XX' as different kind of symbol` 的报错原因是什么了吧（符号表）？了解这些的目的是，当我们在某一时间遇到了一些关于 linker 的错误消息时，大概能知道从哪里查找问题，然后解决它。
