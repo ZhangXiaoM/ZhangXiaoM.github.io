@@ -92,7 +92,7 @@ int main(int argc, const char * argv[]) {
 }
 ```
 
-编译器将它编译成机器代码：
+编译器将它编译成机器代码（`clang -c main.c -o main.o -Os`）：
 
 ```c
 main.o:
@@ -109,7 +109,7 @@ _main:
 
 `callq` 指令是一个有符号偏移的跳转指令，也就是跳转到 `printf()` 函数，地址为 `0x10`（称为符号的引用），我们可以看到 `0x10` 处存放的是一个异或指令，因此汇编器会生成一个符号，存储到符号表中，交给链接器来处理（`printf()` 是 `libc.a` 静态库中的某个目标文件的函数）。
 
-链接器会将定义 `printf()` 的目标文件和 `main.o` 链接成一个新的可执行文件：
+链接器会将定义 `printf()` 的目标文件和 `main.o` 链接成一个新的可执行文件（`clang main.c -o main -Os`）：
 
 ```c
 (__TEXT,__text) section // __TEXT 段，__text 节
