@@ -66,9 +66,9 @@ int sum(int *a, int n) {
 
 如上述例子即为静态链接，在程序加载进内存之前就完成两个目标文件的链接工作。我们知道目标文件是机器可识别的二进制文件，其中指令被存放在 `__TEXT` 内存段中，数据被存储在 `__DATA` 内存段中。
 
-目标文件也是由一系列不间断的字节序列组成，这些字节序列包括：`.text`（指令集）、`.rodata`（只读数据）、`.data`（已初始化的全局和静态变量）、`.bss`（未初始化的全局和静态变量）、`.symtab`（符号表）、debug 信息等等。
+目标文件和进程的地址空间一样也是由一系列不间断的字节序列组成，这些字节序列包括：`.text`（指令集）、`.rodata`（只读数据）、`.data`（已初始化的全局和静态变量）、`.bss`（未初始化的全局和静态变量）、`.symtab`（符号表）、debug 信息等等，每个目标文件都是从 0x0 开始布局的。
 
-符号表是一个陌生的概念，上面例子中的 `sum` 即为函数 `sum()` 的符号被存储在符号表中，只有在该模块中被外部可见的符号或者 `static` 修饰的符号才会被存储在符号表中，该模块私有的符号对其他模块来说没有意义，链接器也不关心它们。符号表中每个符号都对应一个结构体，结构体中存储了该符号对应的地址。
+符号表是一个陌生的概念，上面例子中的 `sum` 即为函数 `sum()` 的符号名称被存储在符号表中，只有在该模块中被外部可见的符号或者 `static` 修饰的符号才会被存储在符号表中，该模块私有的符号对其他模块来说没有意义，链接器也不关心它们。符号表中每个符号都对应一个结构体，结构体中存储了该符号对应的函数地址。
 
 拿上面的例子来说，编译器会展开 `sum.h` 得到 `sum()` 的声明，当编译器在 `sum.s` 中找不到该函数的实现时，就会生成一个符号条目，扔给链接器处理，如果链接器在其他模块也没找到该函数的定义，就会造成链接中断，并报错：
 
@@ -109,7 +109,7 @@ _main:
 
 `callq` 指令是一个有符号偏移的跳转指令，也就是跳转到 `printf()` 函数，地址为 `0x10`（称为符号的引用），我们可以看到 `0x10` 处存放的是一个异或指令，因此汇编器会生成一个符号，存储到符号表中，交给链接器来处理（`printf()` 是 `libc.a` 静态库中的某个目标文件的函数）。
 
-链接器会将定义 `printf()` 的目标文件将 `main.o` 链接成一个新的可执行文件：
+链接器会将定义 `printf()` 的目标文件和 `main.o` 链接成一个新的可执行文件：
 
 ```c
 (__TEXT,__text) section // __TEXT 段，__text 节
@@ -123,7 +123,7 @@ _main:
 0000000100000f89	retq
 ```
 
-链接之后的可执行文件中 `callq` 指令的目标地址被重定向成 `0x100000f8a`，也就是 `main()` 函数调用 `retq` 指令返回后的下一个地址。当可执行文件被加载进内存中时，`prinf()` 的指令就会被加载器分配到 `0x100000f8a` 处。
+链接之后的可执行文件中 `callq` 指令的目标地址被重定向成 `0x100000f8a`，也就是 `main()` 函数调用 `retq` 指令返回后的下一个地址。当可执行文件被加载进内存中时，`prinf()` 的指令集就会被加载器分配到 `0x100000f8a` 处。
 
 链接器使用符号表来完成符号的重定向，如果没有符号表的话，仅靠 `0x10` 这种 magic value，链接器很难知道它是属于哪个目标模块的地址。因此，符号表和符号对链接来说很重要。
 
@@ -159,7 +159,9 @@ int main(int argc, const char * argv[]) {
 
 ![](https://upload-images.jianshu.io/upload_images/5314152-3bfdbe3cc310c982.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
-动态链接器也会重定位符号的引用，比如上面例子中的 `0x10`，动态链接器会将动态库中的符号表拷贝到内存的内存中，然后像静态链接那样重定向它们在该进程空间内的引用，就是将目标文件中的地址修改为符号在进程内存中的地址。
+动态链接器也会重定位符号的引用，比如上面例子中的 `0x10`，动态链接器会将动态库中的符号表拷贝到进程的内存中，然后像静态链接那样重定向它们在该进程空间内的引用，就是将目标文件中的地址修改为符号在进程内存中的地址。
+
+静态链接将目标文件拷贝到磁盘中，被链接完成后加载进内存，动态链接在加载的时候拷贝到内存中，节省了磁盘空间。
 
 ### 三、dyld
 
@@ -204,11 +206,11 @@ dyld 的工作大致分为以下几步：
 
 #### 3.1 共享缓存
 
-我们知道 objc 这门语言是动态特性的语言，对象的内存分配都是运行时来完成的，也就是它是一门重度依赖运行时的语言， 运行时以动态库的形式被 dyld 链接进进程内存空间。因此，所有 iOS 中的应用程序都要在启动时链接运行时库，因为 iOS 中程序所依赖的系统库不止一个，dyld 会在程序启动时链接它们，这样就会造成很大的时间和空间的开销。dyld 会通过共享缓存来优化这一点。
+我们知道 objc 这门语言是动态特性的语言，对象的内存分配都是运行时来完成的，也就是它是一门重度依赖运行时的语言， 运行时以动态库的形式被 dyld 链接进进程内存空间，因此，所有 iOS 中的应用程序都要在启动时链接运行时库。iOS 中程序所依赖的系统库并不只有运行时库一个，dyld 会在程序启动时链接它们，这样就会造成很大的时间和空间的开销。dyld 会通过共享缓存来优化这一点。
 
-从上面对 dyld 的工作模式的分析，我们可以知道，每个进程的动态库都应该是不同的，因为它们分别被加载进不同的进程内存。事实上，dyld 的实现对这里进行了优化，它使用了共享缓存，共享缓存中保存了系统动态库的拷贝，大部分的系统库的加载和链接都是在程序启动前就完成的，所有的进程都会共享这部分内存，这样就可以节省了很多的启动时间和内存。共享内存是进程间通信的一种方式，可以参考我的这篇文章：[并发编程之进程](https://zhangxiaom.github.io/2018/06/12/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E4%B9%8B%E8%BF%9B%E7%A8%8B/)。
+从上面对 dyld 的工作模式的分析，我们可以知道，每个进程的动态库都应该是不同的，因为它们分别被拷贝进不同的进程内存。事实上，dyld 的实现对这里进行了优化，它使用了共享缓存，共享缓存中保存了系统动态库的拷贝，大部分的系统库的加载和链接都是在程序启动前就完成的，所有的进程都会共享这部分内存，这样就可以节省了很多的启动时间和内存。共享内存是进程间通信的一种方式，可以参考我的这篇文章：[并发编程之进程](https://zhangxiaom.github.io/2018/06/12/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E4%B9%8B%E8%BF%9B%E7%A8%8B/)。
 
-共享缓存解决了每个进程都要加载共享库的缺陷，dyld 的另一个工作是重定向符号表，就是上文中的第三步，在 iOS 和 Mac OS 中被称为 `selector` ，它就是 C 语言中符号的名称，例如上文中提到的 `sum`。我们可以从开源库中找到系统的动态库的符号列表：[built-in selector table](http://www.opensource.apple.com/source/objc4/objc4-371/runtime/objc-sel-table.h)，这些符号保存了函数（指令）的实际地址，dyld 需要将它们拷贝的进程内存中，然后重定向对它们的引用（类似于静态链接的重定向）。
+共享缓存解决了每个进程都要加载共享库的缺陷，dyld 的另一个工作是重定向符号表，就是上文中的第三步，在 iOS 和 Mac OS 中被称为 `selector` ，它就是 C 语言中符号的名称，例如上文中提到的 `sum`。我们可以从开源库中找到系统的动态库的符号列表：[built-in selector table](http://www.opensource.apple.com/source/objc4/objc4-371/runtime/objc-sel-table.h)，数据量不算小，这些符号保存了函数（指令）的实际地址，dyld 需要将它们拷贝的进程内存中，然后重定向对它们的引用（类似于静态链接的重定向，加载时完成）。
 
 共享缓存会自己创建一个符号表，并且更新它们的引用，这样就可以使所有的进程都共享这些动态库的符号表，不用将符号表拷贝到自己的进程空间中，节约了拷贝的时间和空间，但是 dyld 仍要将目标文件中的符号地址重定向为共享缓存中的地址。
 
@@ -222,19 +224,51 @@ dyld 的工作大致分为以下几步：
 
 从 runtime 源码[`objc-loadmethod.mm`](http://opensource.apple.com/source/objc4/objc4-532.2/runtime/objc-loadmethod.mm) 中，我们可以找到 `+load` 方法的调用时机，以及它在继承关系的类中的调用情况：
 
-> call_load_methods （函数名）
->
-> Call all pending class and category +load methods. （调用所有类和分类的 +load 方法）
->
-> Class +load methods are called superclass-first. （先调用父类的 +load，在调用子类的）
->
-> Category +load methods are not called until after the parent class's +load.（先调用类的 +load，在调用分类的）
->
-> Re-entrant calls do nothing; the outermost call will finish the job. （重复调用该方法无效，最外层的调用将完成所有工作）
+```c
+/*
+*call_load_methods （函数名）
+* Call all pending class and category +load methods. （调用所有类和分类的 +load 方法）
+* Class +load methods are called superclass-first. （先调用父类的 +load，在调用子类的）
+* Category +load methods are not called until after the parent class's +load.（先调用类的 +load，在调用分类的）
+*/
+// 迭代的向所有类对象发送 `+load` 消息
+void call_load_methods(void)
+{
+    static bool loading = NO;
+    bool more_categories;
+
+    loadMethodLock.assertLocked();
+
+    // Re-entrant calls do nothing; the outermost call will finish the job.（重复调用该方法无效，最外层的调用将完成所有工作）
+    // 注意： loading 是 static 变量
+    if (loading) return;
+    loading = YES;
+	// 自动释放池，管理迭代中生成的对象
+    void *pool = objc_autoreleasePoolPush();
+
+    do {
+        // 1. Repeatedly call class +loads until there aren't any more
+        while (loadable_classes_used > 0) {
+            // Call all pending class +load methods.
+            call_class_loads();
+        }
+
+        // 2. Call category +loads ONCE
+        // category 的 `+load` 在所有类对象之后调
+        more_categories = call_category_loads();
+
+        // 3. Run more +loads if there are classes OR more untried categories
+    } while (loadable_classes_used > 0  ||  more_categories);
+
+    objc_autoreleasePoolPop(pool);
+
+    loading = NO;
+}
+```
 
 因此，我们可以得到类对象的 `+load` 方法的调用时机和调用顺序，以及每个类对象只会被发送一次 `+load` 消息。
 
-做个试验验证一下，创建几个类为：`Father`、`Son`、`GrandSon`、`Father+Extension`，然后重写每个类的 `+load`，函数的实现打印一句话 `XXX(类) load`，并且在 `Father` 的 `+load` 和 `main()` 函数分别打个断点，运行程序，程序会先在 `+load` 方法处中断，然后才在 `main()` 函数中断，并且 log 结果为：
+做个试验验证一下，创建几个类为：`Father`、`Son`、`GrandSon`、`Father+Extension`，然后重写每个类的 `+load`，函数的实现为打印 `XXX(类) load`，并且在 `Father` 的 `+load` 和 `main()` 函数分别打个断点，运行程序，程序会先在 `+load` 方法处中断，然后才在 `main()` 函数中断，并且 log 结果为：
 
 ```c
 father load
@@ -247,19 +281,19 @@ extension load
 
 iOS 开发中的 **Method Swizzling**，为什么要在 `+load` 方法中做？
 
-熟悉 runtime 的同学一定知道 runtime 会将函数实现成 C++ 中虚函数表的形式，在运行时调用，参考我的另一篇文章：[从runtime源码解析消息发送的动态性](https://zhangxiaom.github.io/2018/01/20/%E4%BB%8Eruntime%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90%E6%B6%88%E6%81%AF%E5%8F%91%E9%80%81%E7%9A%84%E5%8A%A8%E6%80%81%E6%80%A7/)。从上文我们知道了 `+load` 方法的调用时机是类对象加载到进程地址空间的之后的第一时间，也就是该类对象接收到的第一条消息，因此，此时做方法交换是修改类对象的方法列表的最好时机。其实 **Method Swizzling** 的实质有点类似于对符号引用的重定向，当然要在类对象加载的时候完成。
+熟悉 runtime 的同学一定知道 runtime 会将函数实现成 C++ 中虚函数表的形式，在运行时调用，参考我的另一篇文章：[从runtime源码解析消息发送的动态性](https://zhangxiaom.github.io/2018/01/20/%E4%BB%8Eruntime%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90%E6%B6%88%E6%81%AF%E5%8F%91%E9%80%81%E7%9A%84%E5%8A%A8%E6%80%81%E6%80%A7/)。从上文我们知道了 `+load` 方法的调用时机是类对象加载到进程地址空间的之后的第一时间，也就是可能是该类对象接收到的第一条消息，因此，此时做方法交换是修改类对象的方法列表的最好时机。其实 **Method Swizzling** 的实质有点类似于对符号引用的重定向，当然要在类对象加载的时候完成。
 
 ### 四、程序启动时间
 
-从上面我们的分析，可以看到我们的应用程序从启动到代码的执行之间经历了多少事，链接和加载也是影响程序启动的主要因素，其中 apple 对 dyld 的优化-共享缓存可以帮我们很大程度的提高应用的启动时间，但是我们自己也应该承担一部分责任：
+从上面我们的分析，可以看到应用程序从启动到我们写的代码的执行之间经历了多少事，链接和加载也是影响程序启动的主要因素，其中 apple 对 dyld 的优化-共享缓存可以帮我们很大程度的提高应用的启动时间，但是我们自己也应该承担一部分责任：
 
-- 删除项目中不再使用的动态库，因为链接和加载它们需要很多的时间和空间。
+- 删除项目中不再使用的动态库（非系统库，dyld 不会创建共享缓存），因为链接和加载它们需要很多的时间和空间。
 
 - 删除项目中不再使用的类和分类，因为加载它们到进程的地址空间是在启动时完成的。
 
 - 尽量少的使用 **Method Swizzling**，因为方法交换需要遍历方法列表，会拖慢 `+load` 方法的执行，这也是在启动的时候完成的。
 
-- 使用静态库代替非系统库的动态库，能节省一部分链接的时间，但是多了加载的时间，总体会提升一些。
+- 使用静态库代替非系统库的动态库，让重定向在编译的时候完成，能节省一部分链接的时间。
 
 等等。
 
