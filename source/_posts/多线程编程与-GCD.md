@@ -40,23 +40,153 @@ tags: 并发编程
 
   调度程序负责调度线程，比如进程 A 和进程 B 分别有三个线程 A1, A2, A3, B1, B2, B3，调度程序分配 10ms 的时间片给线程 A1，10ms 过后分配 10ms 的时间片给 B1，此时既要切换进程的上下文，也要切换线程的上下文，因此，这种调度方式会带来更大的开销。线程的上下文由内核保存，一般来说，内核级线程会使用这种调度方式。
 
+图示：
+
 ![](https://upload-images.jianshu.io/upload_images/5314152-ebe04302a61f6c8a.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 ### 三、线程同步—锁
 
 同一进程的多个线程会共享该进程的地址空间，比如数据段、文本段、堆等。当多个线程并发的访问同一块内存段时，就会产生竞态条件导致的线程安全问题。锁就是为了解决这些问题，也填一下[并发编程之进程](https://zhangxiaom.github.io/2018/06/12/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B%E4%B9%8B%E8%BF%9B%E7%A8%8B/)里进程同步问题留下的坑。
 
-#### 3.1 互斥锁
+理解临界区的概念是解决线程安全和并发编程模型的重要依据。
 
-#### 3.2 自旋锁
+![](/var/folders/qd/7zbm76j916n2_dhjbm6nsm480000gn/T/abnerworks.Typora/image-20180710144325229.png)
 
-#### 3.3 信号量
+上图即为并发的情况下，临界区不安全的示例，我们可能会疑惑的地方是，单核 CPU 的系统中，存在这种并行的情况吗？其实即使在不支持并行的系统中，同样会有这种并发问题：在时间 T2，线程 A 的时间片用完，线程 A 挂起，此时 A 的上下文中记录它的状态和临界区中变量的值，切换到线程 B 执行，线程 B 用完时间片记录临界区的值，切换回线程 A，此时调度程序读取的线程 A 的执行状态为时间点 T2，因此此时相当于线程 A 回到时间点 T2 继续执行，直到下一次切换。所以我们可以把这种上下文切换的情况描述为上图中的**并行**，实则为**并发**。
 
-#### 3.4 同步锁
+```c
+// 全局变量 _sum
+int _sum = 0;
+// 并发执行函数指针
+void *thr_fn(void *arg) {
+    printf("start %d\n", _sum);
+    for (int i = 0; i < 10000; ++i) {
+        _sum += i;
+    }
+    printf("sum of 0 ~ 9999 is %d\n", _sum);
+    return NULL;
+}
 
-#### 3.5 NSLock
+int main(int argc, const char * argv[]) {
+    // insert code here...
+    // 创建两个线程，执行 thr_fn
+    for (int i = 0; i < 2; ++i) {
+        pthread_t ntid;
+        pthread_create(&ntid, NULL, thr_fn, NULL);
+    }
+    return 0;
+}
+```
 
+log 的结果：
 
+```c
+// 这个结果不是唯一的，因为结果取决于线程切换的时机(竞态条件)
+start 0
+start 1021735
+sum of 0 ~ 9999 is 46697501
+sum of 0 ~ 9999 is 84364406
+Program ended with exit code: 0
+```
+
+我们可以计算得到 0~9999 的和为 49995000，因此两个子线程的执行的结果都不是我们想要的结果，其实上图很好的解释这段代码的执行过程，线程 B 迭代之前获取的初始值并不是我们想要的线程 A 的执行结果，是因为在时间点 T2，线程 B 读取的临界区的值为线程 A 的 T1 ~ T2 的执行结果，此时我们得到的结果就是竞态条件产生的结果。
+
+锁能帮助我们解决这个问题，当这段代码加锁后的执行过程为：
+
+![](https://upload-images.jianshu.io/upload_images/5314152-a6f1fe1e040563fe.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+在时间 T2 线程 B 试图进入临界区时，由于临界区被加锁，所以线程 B 被阻塞，当线程 A 将临界区解锁后，线程 B 才能进入临界区。加锁：
+
+```c
+void *thr_fn(void *arg) {
+ 	pthread_mutex_lock(&_mutex);
+    printf("start %d\n", _sum);
+    for (int i = 0; i < 10000; ++i) {
+        _sum += i;
+    }
+	printf("sum of 0 ~ 10000 is %d\n", _sum);
+    pthread_mutex_unlock(&_mutex);
+    return NULL;
+}
+
+```
+
+log 结果：
+
+```c
+start 0
+sum of 1 ~ 10000 is 49995000
+start 49995000
+sum of 1 ~ 10000 is 99990000
+Program ended with exit code: 0
+```
+
+- 互斥锁
+
+  上述例子中所使用的 `pthread_mutex_t` 即为互斥锁，互斥锁其实也是一个共享的全局变量，当该变量满足一定的条件时，允许线程访问临界区，否则该线程即被挂起。我们可以将该互斥锁想象成现实中的锁，锁的初始值的打开的，线程 A 进入房间（临界区）后，将锁锁住（时刻 T1），当线程 B 想进入房间时（时刻 T2），此时房间上锁，它只能挂起等待，直到线程 A 离开房间并且将锁打开（时刻 T3），线程 B 才能进入房间，并将锁锁住。
+
+- 自旋锁
+
+  自旋锁是特殊的互斥锁，不同的是，当线程访问锁变量时，会一直不停的询问锁变量的状态，也就是在 T2 时刻，线程 B 不会被阻塞而是一直不停（死循环）的访问锁变量，直到它的时间片被消耗完或者锁被打开。因此，互斥锁会在临界区加锁时马上进行上下文切换，而自旋锁会不停的死循环，因此自旋锁会消耗更多的 CPU 资源，在不确定临界区执行时间的前提下，慎用自旋锁。
+
+- 信号量
+
+  互斥锁的概念标定了它只能有两种状态，就是加锁和未加锁，而信号量可以控制进入临界区的线程数量， 信号量被定义为一个正整数，当线程要进入临界区时，会首先访问信号量，当信号量大于 0 时，就代表可以进入临界区， 并将信号量减一，当信号量等于 0 时，线程就会被阻塞，当线程出了临界区时，会将信号量加一。
+
+- 同步锁
+
+  同步锁是 objc 语言特有的一种锁，`@synchronized{}`，代码块中的内容即为临界区，它会被编译器替换为：
+
+  ```c
+  // 源代码
+  @synchronized{
+      work();
+  }
+  // runtime 替换后
+  objc_sync_enter(obj);
+  work();
+  objc_sync_exit(obj);
+  ```
+
+  我们可以从 runtime 动态库中的 `<objc/objc-sync.h>`（[在这](https://opensource.apple.com/source/objc4/objc4-646/runtime/objc-sync.h)）中找到这两个方法的定义：
+
+  ```c
+  /** 
+   * Begin synchronizing on 'obj'.  
+   * Allocates recursive pthread_mutex associated with 'obj' if needed.
+   * 
+   * @param obj The object to begin synchronizing on.
+   * 
+   * @return OBJC_SYNC_SUCCESS once lock is acquired.  
+   */
+  OBJC_EXPORT  int objc_sync_enter(id obj)
+      OBJC_AVAILABLE(10.3, 2.0, 9.0, 1.0);
+  
+  /** 
+   * End synchronizing on 'obj'. 
+   * 
+   * @param obj The objet to end synchronizing on.
+   * 
+   * @return OBJC_SYNC_SUCCESS or OBJC_SYNC_NOT_OWNING_THREAD_ERROR
+   */
+  OBJC_EXPORT  int objc_sync_exit(id obj)
+      OBJC_AVAILABLE(10.3, 2.0, 9.0, 1.0);
+  ```
+
+  进一步从实现文件中，我们可以得到的结论是：`objc_sync_enter()` 会为 `obj` 生成并关联一个递归锁，然后将临界区的内容加锁，临界区代码执行完后，调用 `objc_sync_exit()` 解锁。
+
+- NSLock
+
+  NSLock 是对 `pthread_mutex_t` 的对象封装。
+
+**NOTE**：除了同步锁，其他几个锁都是不可重入锁，如果重复加同一个锁，就会造成死锁，例如：
+
+```c
+pthread_mutex_lock(&_mutex);
+pthread_mutex_lock(&_mutex);
+```
+
+这样锁变量将永远不会处于解锁状态导致死锁。
 
 ### 四、GCD
 
