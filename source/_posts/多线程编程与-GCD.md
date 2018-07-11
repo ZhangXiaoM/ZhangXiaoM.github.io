@@ -142,7 +142,7 @@ Program ended with exit code: 0
   @synchronized{
       work();
   }
-  // runtime 替换后
+  // 编译器替换后
   objc_sync_enter(obj);
   work();
   objc_sync_exit(obj);
