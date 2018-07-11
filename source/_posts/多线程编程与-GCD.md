@@ -188,14 +188,139 @@ pthread_mutex_lock(&_mutex);
 
 这样锁变量将永远不会处于解锁状态导致死锁。
 
-### 四、GCD
+### 四、GCD 中的多线程编程
+
+GCD 是对 POSIX 线程的高级封装，它会帮我们管理线程的生命周期，我们只需要将要执行的任务（block）以同步或者异步的形式添加进队列中，GCD 会选择合适的线程去执行任务。队列就是一种先入先出的数据结构，因此，添加进队列中的任务的执行顺序即为入队的顺序，而执行完成的顺序，取决于线程的调度、任务的长短、队列是串行还是并发、同步任务还是异步任务等等。
+
+**NOTE**：我们所有没有添加进队列的任务其实就是主线程在执行，我们可以将这些任务理解为同步串行任务，也就是所有的函数顺序执行，当前函数执行完才会执行下一个，这些任务包含 `dispatch_sync()` 和 `dispatch_async()`。大概的模型就是这样（忽略任务之间空隙）：
+
+![](https://upload-images.jianshu.io/upload_images/5314152-b3a0b67c91fe605f.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+下面的讨论的队列均不包含主队列。我们将 `dispatch_sync()` 和 `dispatch_async()` 定义为一个 Task。并且将上下文切换以并行（伪并行）的形式描述。
 
 #### 4.1 同步串行
 
+```objc
+dispatch_queue_t serialQueue = dispatch_queue_create("com.xm.test.serialQueue", DISPATCH_QUEUE_SERIAL);
+// Task1
+dispatch_sync(serialQueue, ^{
+	// Task2
+    NSLog(@"Task2");
+    NSLog(@"%d", [NSThread isMainThread]); 
+    // log result is 1.
+});
+// Task3
+dispatch_sync(queue, ^{
+	// task4
+	NSLog(@"Task4");
+});
+// task5
+NSLog(@"Task5");
+```
+
+此时这段代码的执行情况理论上应该为：
+
+![](https://upload-images.jianshu.io/upload_images/5314152-7de31071475c4fa6.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+在时间 T1 处切换到子线程执行加入 `serialQueue` 中的同步任务 `Task2`，直到任务执行完，切回主线程继续执行 `Task3`。同步任务阻塞主线程的原因是：主线程在等待 `dispatch_sync()` 函数返回，而 `dispatch_sync()` 函数在等待 `Task2` 返回，因此，即使同步任务由子线程完成，它依然会阻塞主线程。实际上，GCD 会帮我们做一些优化：
+
+![](https://upload-images.jianshu.io/upload_images/5314152-e50804b386b9354e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+GCD 会直接返回 `dispatch_sync()` 函数，然后在主线程执行同步任务，这样就避免了多余的上下文切换的开销。
+
 #### 4.2 同步并发
+
+同样是上面的示例代码，我们将串行队列，替换为并发队列：
+
+```objc
+dispatch_queue_t concurrentQueue = dispatch_queue_create("com.xm.test.concurrentQueue", DISPATCH_QUEUE_CONCURRENT);
+// Task1
+dispatch_sync(concurrentQueue, ^{
+	// Task2
+    NSLog(@"Task2");
+    NSLog(@"%d", [NSThread isMainThread]); 
+    // log result is 1.
+});
+// Task3
+dispatch_sync(concurrentQueue, ^{
+	// task4
+	NSLog(@"Task4");
+});
+// task5
+NSLog(@"Task5");
+```
+
+此时，理论上的任务的执行方式为：
+
+![](https://upload-images.jianshu.io/upload_images/5314152-0daa148ae166e0cd.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+实际上 GCD 仍然会做上面的优化：
+
+![image-20180711140209724](/var/folders/qd/7zbm76j916n2_dhjbm6nsm480000gn/T/abnerworks.Typora/image-20180711140209724.png)
+
+即使是添加进并发队列的同步任务也会阻塞主线程，理由同上，因此，GCD 同样会将任务放到主线程去执行，避免了上下文切换的开销。
 
 #### 4.3 异步串行
 
+我们现在将 4.1 中的同步方法改成异步方法：
+
+```objc
+dispatch_queue_t serialQueue = dispatch_queue_create("com.xm.test.serialQueue", DISPATCH_QUEUE_SERIAL);
+// Task1
+dispatch_async(serialQueue, ^{
+	// Task2 (可使用 for 循环模拟线程阻塞，看代码的输出顺序)
+	// for (int i = 0; i < 1000; ++i) {}
+    NSLog(@"Task2");
+    NSLog(@"%d", [NSThread isMainThread]); 
+    // log result is 0.
+});
+// Task3
+dispatch_async(queue, ^{
+	// task4
+	NSLog(@"Task4");
+});
+// task5
+NSLog(@"Task5");
+```
+
+主线程会在执行 `dispatch_async()` 时将任务加入 `serialQueue` 然后立刻返回执行下一条指令，同时调度子线程去执行加入队列中的任务，此时任务执行完成的时机依赖于调度程序的调度、任务的长短和加入队列中的顺序。
+
+![](https://upload-images.jianshu.io/upload_images/5314152-e70e3cc5db0846cf.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+**NOTE**：当该示例中的队列为主队列时，异步任务会添加进主队列的队尾，当主线程执行完主队列中其他任务时，才会去执行该任务。
+
 #### 4.4 异步并发
 
-### 未完待续...
+将 4.2 中的同步改为异步：
+
+```objc
+dispatch_queue_t concurrentQueue = dispatch_queue_create("com.xm.test.concurrentQueue", DISPATCH_QUEUE_CONCURRENT);
+// Task1
+dispatch_async(concurrentQueue, ^{
+	// Task2
+    NSLog(@"Task2");
+    NSLog(@"%d", [NSThread isMainThread]); 
+    // log result is 0.
+});
+// Task3
+dispatch_async(concurrentQueue, ^{
+	// task4
+	NSLog(@"Task4");
+});
+// task5
+NSLog(@"Task5");
+```
+
+此时：
+
+![](https://upload-images.jianshu.io/upload_images/5314152-1710825fa0fa14cb.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
+任务执行完成的顺序仍然依赖于调度程序分配的时间片、任务的长度等。`Task4` 会在 `dispatch_async2()` 执行后加入队列，GCD 会分配合适的线程去执行它。
+
+#### 4.5 死锁
+
+同步任务是造成死锁的主要原因，假如将 4.1 中的串行队列换成主队列的话，此时主队列在等待 `dispatch_sync()` 返回，`dispatch_sync()` 在等待 `block` 返回，block 被添加进主队列，并且在 `dispatch_sync()` 之后，因此，`dispatch_sync()` 返回后才能执行 block，这样就造成了 `dispatch_sync()` 和 block 之间的循环等待而造成死锁（只有添加进非主队列的同步任务，GCD 才会优化）。
+
+### 总结
+
+在实际工作中，并发带来的问题是比较让人头痛的问题。本文以最简单的模型分析并发时多个线程协同工作的原理，当然必须理解原理才能在工作中更好的分析并发带来的问题。推荐一本书 《现代操作系统》，虽然它不讲 GCD，但是看了它再去理解 GCD 会更容易一点。
