@@ -256,7 +256,7 @@ NSLog(@"Task5");
 
 实际上 GCD 仍然会做上面的优化：
 
-![image-20180711140209724](/var/folders/qd/7zbm76j916n2_dhjbm6nsm480000gn/T/abnerworks.Typora/image-20180711140209724.png)
+![](https://upload-images.jianshu.io/upload_images/5314152-f23c4a04836b7903.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 即使是添加进并发队列的同步任务也会阻塞主线程，理由同上，因此，GCD 同样会将任务放到主线程去执行，避免了上下文切换的开销。
 
