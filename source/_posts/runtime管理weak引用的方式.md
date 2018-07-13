@@ -40,5 +40,47 @@ weak_table_add_item(&obj, weakRefer2);
 
 ### 真相到底如何？
 
+我们可以找到 runtime 源码中对 weak 的处理：[objc-weak.h](https://opensource.apple.com/source/objc4/objc4-646/runtime/objc-weak.h) 和 [objc-weak.mm](https://opensource.apple.com/source/objc4/objc4-646/runtime/objc-weak.mm)。在看源码之前，先了解一下[哈希表](https://zhangxiaom.github.io/2018/03/23/%E5%93%88%E5%B8%8C%E8%A1%A8/)吧。
 
+```c
+/**
+ * The global weak references table. Stores object ids as keys,
+ * and weak_entry_t structs as their values.
+ */
+struct weak_table_t {
+    weak_entry_t *weak_entries;
+    size_t    num_entries;
+    uintptr_t mask;
+    uintptr_t max_hash_displacement;
+};
+```
 
+确实是一个全局哈希表，保存了所有对象的弱引用，不过保存的方式是，以对象为键，以 `weak_entry_t` 结构体为值，而不是之前提到的 weak 变量。`mask` 和 `max_hash_displacement` 是用来计算哈希码的。
+
+```c
+/**
+ * The internal structure stored in the weak references table. 
+ * It maintains and stores
+ * a hash set of weak references pointing to an object.
+ * If out_of_line_ness != REFERRERS_OUT_OF_LINE then the set
+ * is instead a small inline array.
+ */
+struct weak_entry_t {
+    objc_object* referent;
+    union {
+        struct {
+            weak_referrer_t *referrers;
+            uintptr_t        out_of_line_ness : 2;
+            uintptr_t        num_refs : PTR_MINUS_2;
+            uintptr_t        mask;
+            uintptr_t        max_hash_displacement;
+        };
+        struct {
+            // out_of_line_ness field is low bits of inline_referrers[1]
+            weak_referrer_t  inline_referrers[WEAK_INLINE_COUNT];
+        };
+    };
+}
+```
+
+其实 `weak_table_t` 实现了一个简易的对象类型的哈希表，`weak_entry_t` 里面保存了哈希表中某一条目的 key 和 value，至于为什么保存 key，是为了发生哈希冲突时，找到这个值。当该对象的弱引用数量低于4个时，`weak_entry_t` 会用一个轻量级的数组存储它们，当数量大于4 时，`weak_entry_t` 会用哈希 set（哈希 set 是一个只有 key 的哈希表）存储它们。
