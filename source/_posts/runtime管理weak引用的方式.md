@@ -69,18 +69,21 @@ struct weak_entry_t {
     objc_object* referent;
     union {
         struct {
+            // typedef id weak_referrer_t
             weak_referrer_t *referrers;
-            uintptr_t        out_of_line_ness : 2;
-            uintptr_t        num_refs : PTR_MINUS_2;
-            uintptr_t        mask;
-            uintptr_t        max_hash_displacement;
+            uintptr_t        out_of_line_ness : 2; // 标记是否需要用 set
+            uintptr_t        num_refs : PTR_MINUS_2; // 弱引用的数量
+            uintptr_t        mask; // 计算哈希码
+            uintptr_t        max_hash_displacement; // 计算哈希码
         };
         struct {
             // out_of_line_ness field is low bits of inline_referrers[1]
-            weak_referrer_t  inline_referrers[WEAK_INLINE_COUNT];
+            weak_referrer_t  inline_referrers[WEAK_INLINE_COUNT]; // 内联数组
         };
     };
 }
 ```
 
-其实 `weak_table_t` 实现了一个简易的对象类型的哈希表，`weak_entry_t` 里面保存了哈希表中某一条目的 key 和 value，至于为什么保存 key，是为了发生哈希冲突时，找到这个值。当该对象的弱引用数量低于4个时，`weak_entry_t` 会用一个轻量级的数组存储它们，当数量大于4 时，`weak_entry_t` 会用哈希 set（哈希 set 是一个只有 key 的哈希表）存储它们。
+其实 `weak_table_t` 实现了一个简易的对象类型的哈希表，`weak_entry_t` 里面保存了哈希表中某一条目的 key 和 value，至于为什么保存 key，是为了发生哈希冲突时，找到这个值。当该对象的弱引用数量低于4个时，`weak_entry_t` 会用一个轻量级的数组存储它们的**地址**，当数量大于4 时，`weak_entry_t` 会用哈希 set（哈希 set 是一个只有 key 的哈希表）存储它们的**地址**。
+
+### 待续...
