@@ -70,7 +70,7 @@ struct weak_entry_t {
     union {
         struct {
             // typedef id weak_referrer_t
-            weak_referrer_t *referrers;
+            weak_referrer_t *referrers; // 保存弱引用地址的 hash set
             uintptr_t        out_of_line_ness : 2; // 标记是否需要用 set
             uintptr_t        num_refs : PTR_MINUS_2; // 弱引用的数量
             uintptr_t        mask; // 计算哈希码
@@ -78,7 +78,7 @@ struct weak_entry_t {
         };
         struct {
             // out_of_line_ness field is low bits of inline_referrers[1]
-            weak_referrer_t  inline_referrers[WEAK_INLINE_COUNT]; // 内联数组
+            weak_referrer_t  inline_referrers[WEAK_INLINE_COUNT]; // 轻量级内联数组
         };
     };
 }
