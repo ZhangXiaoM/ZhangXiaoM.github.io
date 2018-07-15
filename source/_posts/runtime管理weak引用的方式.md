@@ -84,6 +84,115 @@ struct weak_entry_t {
 }
 ```
 
-其实 `weak_table_t` 实现了一个简易的对象类型的哈希表，`weak_entry_t` 里面保存了哈希表中某一条目的 key 和 value，至于为什么保存 key，是为了发生哈希冲突时，找到这个值。当该对象的弱引用数量低于4个时，`weak_entry_t` 会用一个轻量级的数组存储它们的**地址**，当数量大于4 时，`weak_entry_t` 会用哈希 set（哈希 set 是一个只有 key 的哈希表）存储它们的**地址**。
+其实 `weak_table_t` 实现了一个简易的对象类型的哈希表，`weak_entry_t` 里面保存了哈希表中某一条目的 key 和 value，至于为什么保存 key，是为了发生哈希冲突时，找到这个值。当该对象的弱引用数量低于4个时，`weak_entry_t` 会用一个轻量级的数组存储它们的**地址**，当数量大于4 时，`weak_entry_t` 会用哈希 set（哈希 set 是一个只有 keys 的哈希表，相当于 `map.allKeys()`，为了避免存储两个相同的地址）存储它们的**地址**。
+
+[objc-weak.h](https://opensource.apple.com/source/objc4/objc4-646/runtime/objc-weak.h)  提供了几个接口方法，分别是向 `weak_table_t` 中添加、删除、清空某一个对象的数据：
+
+```c
+/// Adds an (object, weak pointer) pair to the weak table.
+/// 向 weak table 中添加一个 <object、weak pointer> 的键值对
+/// 如果 object 已经存在，则向 weak_entry 中插入 *referrer,否则创建一个 weak_entry,将 *referrer 插入
+/// 当哈希表的装填因子满足一定条件时，扩大哈希表长度，重新哈希。
+id weak_register_no_lock(weak_table_t *weak_table, id referent, 
+                         id *referrer, bool crashIfDeallocating);
+
+/// Removes an (object, weak pointer) pair from the weak table.
+/// 从 weak_table 中删除一个键值对
+void weak_unregister_no_lock(weak_table_t *weak_table, id referent, id *referrer);
+
+#if DEBUG
+/// Returns true if an object is weakly referenced somewhere.
+/// 如果一个对象被弱引用过的话，则返回 true
+bool weak_is_registered_no_lock(weak_table_t *weak_table, id referent);
+#endif
+
+/// Called on object destruction. Sets all remaining weak pointers to nil.
+/// 在对象的析构方法中调用，设置所有的弱引用指针为 nil
+void weak_clear_no_lock(weak_table_t *weak_table, id referent);
+```
+
+这几个方法都是常规的操作哈希表的方法，计算哈希码，插入或者删除合适的数据，重新哈希等等。
+
+我们知道，weak 引用的特性是，当对象被释放后，它就会被设置为 `nil`，避免造成野指针。
+
+**野指针**：野指针的概念是，当某个指针指向的内存被回收后，该指针变量保存的扔然是那块内存的地址，就会造成访问错误的内存的 crash，通常的崩溃信息是 `BAD_ACCESS`。例如：
+
+```c
+int *a = (int *)malloc(sizeof(int *));
+free(a);
+printf("%p\n", a); // BAD_ACCESS crash
+```
+
+崩溃的前提是，指针指向的内存被回收，因为 `free()` 函数释放的内存不会被立刻回收，所以这段代码可能不会直接崩溃，一旦 `a` 指向的内存被回收，就肯定会崩溃。因此，我们需要手动将指针设置为 `NULL`：
+
+```c
+int *a = (int *)malloc(sizeof(int *));
+free(a);
+a = NULL;
+printf("%p\n", a); // OK, note: 被设置为 NULL 的指针，不要用 *a
+```
+
+weak 引用的这种特性配合 ARC 就大大减少了野指针出现的概率。我们来看 runtime  的实现：
+
+```c++
+/** 
+ * Called by dealloc; nils out all weak pointers that point to the 
+ * provided object so that they can no longer be used.
+ * 
+ * @param weak_table 
+ * @param referent The object being deallocated. 
+ */
+void 
+weak_clear_no_lock(weak_table_t *weak_table, id referent_id) 
+{
+    // 将 id 类型转换为 objc 类型
+    objc_object *referent = (objc_object *)referent_id; 
+	// 通过 object 找到 table 中存的值
+    weak_entry_t *entry = weak_entry_for_referent(weak_table, referent);
+    // assert(entry)
+    if (entry == nil) {
+        /// XXX shouldn't happen, but does with mismatched CF/objc
+        //printf("XXX no entry for clear deallocating %p\n", referent);
+        return;
+    }
+
+    // zero out references
+    weak_referrer_t *referrers;
+    size_t count;
+    // 判断是否需要 set
+    if (entry->out_of_line()) {
+        // 如果是，将 referrers 指向 set
+        referrers = entry->referrers;
+        count = TABLE_SIZE(entry);
+    } else {
+        // 如果不是，将 referrers 指向内联数组
+        referrers = entry->inline_referrers;
+        count = WEAK_INLINE_COUNT;
+    }
+    // 迭代集合，将指针设置为 nil
+    for (size_t i = 0; i < count; ++i) {
+        objc_object **referrer = referrers[i];
+        if (referrer) {
+            if (*referrer == referent) {
+                *referrer = nil;
+            } else if (*referrer) {
+                // 如果 *referrer != nil && *referrer != referent，断点并报错
+                _objc_inform("__weak variable at %p holds %p instead of %p. "
+                             "This is probably incorrect use of "
+                             "objc_storeWeak() and objc_loadWeak(). "
+                             "Break on objc_weak_error to debug.\n", 
+                             referrer, (void*)*referrer, (void*)referent);
+                objc_weak_error();
+            }
+        }
+    }
+    // 最后将 entry 从 weak_table 中删除
+    weak_entry_remove(weak_table, entry);
+}
+```
+
+代码的具体实现请看注释。
+
+
 
 ### 未完待续...
