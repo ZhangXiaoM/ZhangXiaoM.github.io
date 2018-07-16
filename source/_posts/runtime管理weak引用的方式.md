@@ -197,7 +197,15 @@ weak_clear_no_lock(weak_table_t *weak_table, id referent_id)
 
 这个方法的作用是清空某个对象的所有弱引用，并将它们设置为 `nil`，它会在对象的析构方法（`-dealloc`）中调用，runtime 在管理对象生命周期的过程中会帮助我们统一调用。
 
-在对 `weak_table` 进行删除、清空等操作之前，runtime 会根据 `isa` 指针的某一位判断这个对象是不是有弱引用，[isa指针中隐藏的黑魔法](https://zhangxiaom.github.io/2018/06/26/isa%E6%8C%87%E9%92%88%E4%B8%AD%E9%9A%90%E8%97%8F%E7%9A%84%E9%BB%91%E9%AD%94%E6%B3%95/)。
+在对 `weak_table` 进行清空操作之前，runtime 会根据 `isa` 指针的 64 位地址空间的某一位判断这个对象是不是有弱引用，[isa指针中隐藏的黑魔法](https://zhangxiaom.github.io/2018/06/26/isa%E6%8C%87%E9%92%88%E4%B8%AD%E9%9A%90%E8%97%8F%E7%9A%84%E9%BB%91%E9%AD%94%E6%B3%95/)，如果有，再执行清空操作：
+
+```c
+if (isa.weakly_referenced) {
+    weak_clear_no_lock(&table.weak_table, (id)this);
+}
+```
+
+
 
 
 
