@@ -6,7 +6,7 @@ tags: 内存管理
 
 ### 前言
 
-提及 weak 引用，大多数人都知道在什么时候要用它，如果不知道的话：[ARC内存管理以及循环引用](https://zhangxiaom.github.io/2018/01/02/ARC%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86%E4%BB%A5%E5%8F%8A%E5%BE%AA%E7%8E%AF%E5%BC%95%E7%94%A8/)，其实对于手动管理堆内存来说，比如 C 语言，并不存在所谓的强引用和弱引用，ARC 这种自动引用计数管理内存的方式，导致了两个对象循环引用，从而产生内存泄漏。循环引用就像是双向链表的两个结点的 `next` 指针互相指向，当我们用 C 语言实现循环链表的时候，即使没有 weak，也能很好的管理每个结点的内存。因此，weak 是 ARC 的产物，它需要提供这种机制来避免循环引用造成的内存泄漏。
+提及 weak 引用，大多数人都知道在什么时候要用它，如果不知道的话：[ARC内存管理以及循环引用](https://zhangxiaom.github.io/2018/01/02/ARC%E5%86%85%E5%AD%98%E7%AE%A1%E7%90%86%E4%BB%A5%E5%8F%8A%E5%BE%AA%E7%8E%AF%E5%BC%95%E7%94%A8/)，其实对于手动管理堆内存来说，比如 C 语言，并不存在所谓的强引用和弱引用，ARC 这种自动引用计数管理内存的方式，导致了两个对象循环引用，从而产生内存泄漏。循环引用就像是双向链表的两个结点的 `next` 指针互相指向，当我们用 C 语言实现循环链表的时候，即使没有 weak，也能很好的管理每个结点的内存。因此，weak 是引用计数管理内存的产物，它需要提供这种机制来避免循环引用造成的内存泄漏。
 
 ### runtime 管理 weak 引用
 
@@ -36,7 +36,7 @@ weak_table_add_item(&obj, weakRefer1);
 weak_table_add_item(&obj, weakRefer2);
 ```
 
-哈希表会将 `weakRefer1` 覆盖，显然这不是一种正确的方式，大多数博客都是互相抄，那不如去看看源码吧。
+哈希表会将 `weakRefer1` 覆盖，显然这不是一种正确的方式，大多数博客都是互相抄袭，那不如去看看源码吧。
 
 ### 真相到底如何？
 
@@ -55,7 +55,7 @@ struct weak_table_t {
 };
 ```
 
-确实是一个全局哈希表，保存了所有对象的弱引用，不过保存的方式是，以对象为键，以 `weak_entry_t` 结构体为值，而不是之前提到的 weak 变量。`mask` 和 `max_hash_displacement` 是用来计算哈希码的。
+确实是一个全局哈希表，保存了所有对象的弱引用，不过保存的方式是，以对象为键，以 `weak_entry_t` 结构体为值，而不是之前提到的 weak 变量。`mask` 是用来计算哈希码的，`max_hash_displacement`  是用来解决哈希冲突的。
 
 ```c
 /**
@@ -74,7 +74,7 @@ struct weak_entry_t {
             uintptr_t        out_of_line_ness : 2; // 标记是否需要用 set
             uintptr_t        num_refs : PTR_MINUS_2; // 弱引用的数量
             uintptr_t        mask; // 计算哈希码
-            uintptr_t        max_hash_displacement; // 计算哈希码
+            uintptr_t        max_hash_displacement; // 解决哈希冲突
         };
         struct {
             // out_of_line_ness field is low bits of inline_referrers[1]
@@ -97,12 +97,12 @@ id weak_register_no_lock(weak_table_t *weak_table, id referent,
                          id *referrer, bool crashIfDeallocating);
 
 /// Removes an (object, weak pointer) pair from the weak table.
-/// 从 weak_table 中删除一个键值对
+/// 当键值对存在时，从 weak_entry 中删除一条数据，如果 weak_entry 为空，则从 weak_table 中删除键值对
 void weak_unregister_no_lock(weak_table_t *weak_table, id referent, id *referrer);
 
 #if DEBUG
 /// Returns true if an object is weakly referenced somewhere.
-/// 如果一个对象被弱引用过的话，则返回 true
+/// 如果 weak_table 中有关于这个对象的数据，返回 true
 bool weak_is_registered_no_lock(weak_table_t *weak_table, id referent);
 #endif
 
@@ -115,7 +115,7 @@ void weak_clear_no_lock(weak_table_t *weak_table, id referent);
 
 我们知道，weak 引用的特性是，当对象被释放后，它就会被设置为 `nil`，避免造成野指针。
 
-**野指针**：野指针的概念是，当某个指针指向的内存被回收后，该指针变量保存的扔然是那块内存的地址，就会造成访问错误的内存的 crash，通常的崩溃信息是 `BAD_ACCESS`。例如：
+**野指针**：野指针的概念是，当某个指针指向的内存被回收后，该指针变量保存的仍然是那块内存的地址，就会造成访问错误内存的 crash，通常的崩溃信息是 `BAD_ACCESS`。例如：
 
 ```c
 int *a = (int *)malloc(sizeof(int *));
@@ -139,6 +139,8 @@ weak 引用的这种特性配合 ARC 就大大减少了野指针出现的概率�
  * Called by dealloc; nils out all weak pointers that point to the 
  * provided object so that they can no longer be used.
  * 
+ * 在 dealloc 函数中调用，将所有该对象的弱引用设置为 nil，所有它们不应该再被使用。
+ *
  * @param weak_table 
  * @param referent The object being deallocated. 
  */
@@ -205,8 +207,81 @@ if (isa.weakly_referenced) {
 }
 ```
 
+`weak_entry` 中保存的也是集合，因此，当我们向 `weak_table` 中插入或者删除一条数据时，runtime 会间接的处理 `weak_entry`，当我们插入一条数据时，它会先判断键值对是否存在，如果存在就直接向 `weak_entry` 中插入一条数据，如果不存在，则新建一个 `weak_entry`，然后插入一条数据，向 `weak_entry` 中添加数据的实现为：
 
+```c
+/** 
+ * Add the given referrer to set of weak pointers in this entry.
+ * Does not perform duplicate checking (b/c weak pointers are never
+ * added to a set twice). 
+ * 
+ * 将给定的 referrer 添加进 weak_entry 中的 set
+ *
+ * @param entry The entry holding the set of weak pointers. 
+ * @param new_referrer The new weak pointer to be added.
+ */
+static void append_referrer(weak_entry_t *entry, objc_object **new_referrer)
+{
+    // 是否不需要 set
+    if (! entry->out_of_line()) {
+        // Try to insert inline.
+        // 将 new_referrer 添加进内联数组的尾部
+        for (size_t i = 0; i < WEAK_INLINE_COUNT; i++) {
+            if (entry->inline_referrers[i] == nil) {
+                entry->inline_referrers[i] = new_referrer;
+                return;
+            }
+        }
 
+        // Couldn't insert inline. Allocate out of line.
+        // 创建 set
+        weak_referrer_t *new_referrers = (weak_referrer_t *)
+            calloc(WEAK_INLINE_COUNT, sizeof(weak_referrer_t));
+        // This constructed table is invalid, but grow_refs_and_insert
+        // will fix it and rehash it.
+        // 将内联数组的内容拷贝到新创建的 set
+        for (size_t i = 0; i < WEAK_INLINE_COUNT; i++) {
+            new_referrers[i] = entry->inline_referrers[i];
+        }
+        // 配置 entry
+        entry->referrers = new_referrers;
+        entry->num_refs = WEAK_INLINE_COUNT;
+        entry->out_of_line_ness = REFERRERS_OUT_OF_LINE;
+        entry->mask = WEAK_INLINE_COUNT-1;
+        entry->max_hash_displacement = 0;
+    }
+	
+    assert(entry->out_of_line());
+	// 当 set 的装填因子大于 3/4 时，扩展 size 并重新 hash
+    if (entry->num_refs >= TABLE_SIZE(entry) * 3/4) {
+        return grow_refs_and_insert(entry, new_referrer);
+    }
+    // 计算哈希码
+    size_t begin = w_hash_pointer(new_referrer) & (entry->mask);
+    size_t index = begin;
+    size_t hash_displacement = 0;
+    // 线性探测法解决哈希冲突
+    while (entry->referrers[index] != nil) {
+        hash_displacement++;
+        index = (index+1) & entry->mask;
+        if (index == begin) bad_weak_table(entry);
+    }
+    if (hash_displacement > entry->max_hash_displacement) {
+        entry->max_hash_displacement = hash_displacement;
+    }
+    // 由哈希码得到 index，将数据插入到该 index 处
+    weak_referrer_t &ref = entry->referrers[index];
+    ref = new_referrer;
+    entry->num_refs++;
+}
+```
 
+代码的详细实现请看注释。
 
-### 未完待续...
+将 `referrer` 从 `weak_entry` 中移除的实现和插入差不多，首先判断是否用内联数组，如果是，直接顺序查找后设置为 `nil`，如果不是，计算哈希码，通过哈希码找到那个指针，设置为 `nil`。
+
+### 总结
+
+runtime 对弱引用的处理，基本上和大部分博客的内容是不一致的，用哈希表存储是没错的，不同的是，哈希表中存储的是一个集合的结构，而不是 <&object, pointer> 这种简单的键值对。当然还有很多细节的处理，比如轻便的内联数组、集合的扩充、解决哈希冲突、特别多的对指针和引用的操作等等。
+
+鸡汤时刻，信息爆炸的时代，在接受信息的同时，还应该抱着质疑的态度，哥白尼、伽利略了解一下！😂😂
