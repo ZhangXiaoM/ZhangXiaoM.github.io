@@ -129,7 +129,7 @@ printf("%p\n", a); // BAD_ACCESS crash
 int *a = (int *)malloc(sizeof(int *));
 free(a);
 a = NULL;
-printf("%p\n", a); // OK, note: 被设置为 NULL 的指针，不要用 *a
+printf("%p\n", a); // OK, note: 被设置为 NULL 的指针，不要再用*访问它
 ```
 
 weak 引用的这种特性配合 ARC 就大大减少了野指针出现的概率。我们来看 runtime  的实现：
@@ -169,7 +169,7 @@ weak_clear_no_lock(weak_table_t *weak_table, id referent_id)
         referrers = entry->inline_referrers;
         count = WEAK_INLINE_COUNT;
     }
-    // 迭代集合，将指针设置为 nil
+    // 迭代集合，依次将集合内的指针设置为 nil
     for (size_t i = 0; i < count; ++i) {
         objc_object **referrer = referrers[i];
         if (referrer) {
@@ -192,6 +192,12 @@ weak_clear_no_lock(weak_table_t *weak_table, id referent_id)
 ```
 
 代码的具体实现请看注释。
+
+**NOTE：**`referent` 指向 `object`，`referrer` 指向 `referent`，也就是 `referrer` 中保存的是 weak 变量的地址。
+
+这个方法的作用是清空某个对象的所有弱引用，并将它们设置为 `nil`，它会在对象的析构方法（`-dealloc`）中调用，runtime 在管理对象生命周期的过程中会帮助我们统一调用。
+
+在对 `weak_table` 进行删除、清空等操作之前，runtime 会根据 `isa` 指针的某一位判断这个对象是不是有弱引用，[isa指针中隐藏的黑魔法](https://zhangxiaom.github.io/2018/06/26/isa%E6%8C%87%E9%92%88%E4%B8%AD%E9%9A%90%E8%97%8F%E7%9A%84%E9%BB%91%E9%AD%94%E6%B3%95/)。
 
 
 
