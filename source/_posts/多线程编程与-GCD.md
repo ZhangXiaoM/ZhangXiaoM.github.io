@@ -226,7 +226,7 @@ NSLog(@"Task5");
 
 在时间 T1 处切换到子线程执行加入 `serialQueue` 中的同步任务 `Task2`，直到任务执行完，切回主线程继续执行 `Task3`。同步任务阻塞主线程的原因是：主线程在等待 `dispatch_sync()` 函数返回，而 `dispatch_sync()` 函数在等待 `Task2` 返回，因此，即使同步任务由子线程完成，它依然会阻塞主线程。实际上，GCD 会帮我们做一些优化：
 
-![](https://upload-images.jianshu.io/upload_images/5314152-e50804b386b9354e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+![](https://upload-images.jianshu.io/upload_images/5314152-43745da8a0d48a26.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
 GCD 会直接返回 `dispatch_sync()` 函数，然后在主线程执行同步任务，这样就避免了多余的上下文切换的开销。
 
