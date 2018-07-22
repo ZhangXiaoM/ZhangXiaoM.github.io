@@ -26,9 +26,36 @@ APP 的显示性能问题一直以来都是一个经久不衰的话题，特别�
 
 #### 4、CALayer 和 UIView
 
+`UIView` 和 `CALayer` 都是一些被层级关系管理的矩形块，每一个视图都有一个 layer，当我们对视图做仿射变换（比如旋转、缩放），滑动、渐变等动画时，其实是操作的它的 layer，我们也可以直接对每个视图的 layer 做这些事。
 
+`UIView` 是对 `CALayer` 的高级封装，他除了具有和 layer 相同的功能以外，还能处理手势事件。但是为什么 iOS 要基于 `UIView` 和 `CALayer` 提供两个平行的层级关系呢？为什么不用一个简单的层级来处理所有事情呢？原因在于要做职责分离，这样也能避免很多重复代码。在 iOS 和 Mac OS 两个平台上，事件和用户交互有很多地方的不同，基于多点触控的用户界面和基于鼠标键盘有着本质的区别，这就是为什么 iOS 有 UIKit 和 `UIView`，但是 Mac OS 有 AppKit 和 `NSView` 的原因。他们功能上很相似，但是在实现上有着显著的区别。
+
+ `UIView` 和 `CALayer`  之间有一个 **has a** 的关系，每一个视图都 has a layer，其实既然视图是对图层能力的扩充，那么为什么不是继承关系？这是因为 has a 比 is a 具有更好的扩展性和可维护性。
+
+#### 5、寄宿图
+
+上面说，每个我们在手机屏幕上看到的内容都是由像素组成的图像，动画也是有一帧一帧的图像组成的，每个图像在经过 GPU 处理之前都是以位图的形式存储在内存中，它也被成为 `CALayer` 的寄宿图。
+
+#### 6、Core Graphics
+
+CG 是一个轻量级的 2D 绘图 API，`CALayer` 工作在它的上层，当我们创建一个 `UIView` 时，`CALayer` 会使用 CG 生成一个位图，所以，它的作用是生成位图，我们也可以不通过 `CALayer` 而直接使用它：
+
+```objc
+CGContextRef ctx = UIGraphicsGetCurrentContext();
+CGContextAddRect(ctx, CGRectMake(100, 100, 100, 100));
+CGContextSetFillColorWithColor(ctx, [UIColor redColor].CGColor);
+CGContextFillPath(ctx);
+```
+
+用 CG 绘制一个简单的矩形。
+
+#### 7、Core Animation
+
+当我双击 home 键或者长按应用图标的时候，iPhone 都会有动画交互，其实动画不止存在于应用内，也存在于应用外。其实 CA 是一个独立的渲染服务进程，当我们在应用内准备好动画的执行时间、位图等内容时，通过 IPC 将这些信息传递给 CA，它会调用 Open GL-ES API 完成对动画的渲染工作。Open GL 是一个开放式的图形库，它负责使用 GPU 和图形管线等硬件将位图输送到等屏幕上。
 
 ### 二、CPU 和 GPU 协同工作
+
+CPU 和 GPU 的工作原理请自行维基百科，从上面的几个概念，我们可以得出一个结论：
 
 
 
