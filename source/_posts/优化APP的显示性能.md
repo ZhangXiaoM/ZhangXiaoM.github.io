@@ -128,31 +128,21 @@ CPU 和 GPU 协同工作，上面的六个步骤前五步都是 CPU 的工作，
 
 等等，后面遇到再补充。
 
+### 四、总结
 
+以前总是盲目的看别人的博客，然后优化性能，缺少真正的理论依据，因此自己整理一下，其中不乏一些自己的见解，当然也都是建立在理论上的结果，仅供参考。
 
+### 五、参考
 
+1、[The relationship between CoreGraphics, UIViews and CALayers](https://stackoverflow.com/questions/17715530/the-relationship-between-coregraphics-uiviews-and-calayers)
 
+2、[to drawRect or not to drawRect (when should one use drawRect/Core Graphics vs subviews/images and why?)](https://stackoverflow.com/questions/14659563/to-drawrect-or-not-to-drawrect-when-should-one-use-drawrect-core-graphics-vs-su)
 
+3、[What is different between CoreGraphics and CoreAnimation](https://stackoverflow.com/questions/4392918/what-is-different-between-coregraphics-and-coreanimation)
 
+4、https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques
 
+5、https://developer.apple.com/documentation/uikit/uiview/1622529-drawrect
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+6、[Practical Drawing for iOS Developers](https://developer.apple.com/videos/wwdc/2011/?id=129)
 
