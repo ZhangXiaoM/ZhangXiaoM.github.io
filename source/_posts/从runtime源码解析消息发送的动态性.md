@@ -12,25 +12,15 @@ tags: iOS 运行时
 ## 一、结构体 vs 类
 我们知道，OC 是 C 语言的超集，是对 C 和 C++ 的进一步封装，一开始学习 OC 这门语言的时候，我们就被灌输过一句话：对象存储在堆内存，变量存储在栈内存，而 runtime 告诉我们类是对 C 和 C++ 中结构体的封装，而结构体是值类型（[值类型 vs 引用类型](https://zhangxiaom.github.io/2018/01/02/%E5%80%BC%E7%B1%BB%E5%9E%8B%E5%92%8C%E5%BC%95%E7%94%A8%E7%B1%BB%E5%9E%8B%E5%9C%A8Swift%E4%B8%AD%E7%9A%84%E4%BD%BF%E7%94%A8/)），肯定是存储在栈上的，这不是自相矛盾吗？另外，OC1.0 是完全对 C 语言的封装，C 语言的结构体是不能声明和实现函数的，到底是怎么回事呢？现在我们用结构体实现一个简单的类：
 ```C
-// 父类
-struct SuperFoo {
-    int val;
-};
-
 struct Foo {
     int val;
-    // 指向类对象的指针
-    void *isa;
-    // 指向父类的指针
-    struct SuperFoo *superFoo;
     // 声明一个指针变量 sum，它的类型为具有一个 int 类型返回值，两个 int 类型参数的函数。
     int(*sum)(int,int);
 };
 
 typedef struct Foo* PFoo; // PFoo 为一个指向 Foo 结构体的指针类型
 
-int sum(int a, int b)
-{
+int sum(int a, int b) {
     return a + b;
 }
 
@@ -44,8 +34,6 @@ int main(int argc, const char * argv[]) {
     pFoo -> val = 4;
     // 将函数 sum() 赋值给 pFoo 的成员变量 sum
     pFoo -> sum = sum;
-    // 可以创建一个父类对象，让 superFoo 指向父类对象
-    // pFoo -> superFoo = superPFoo;
     // use
     // 通过函数指针调用函数，pFoo -> sum 是一个指向函数sum的指针
     int result = (pFoo -> sum)(4, 5);
