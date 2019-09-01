@@ -1,0 +1,74 @@
+<!DOCTYPE html><html><head><meta name="generator" content="Hexo 3.9.0"><meta charset="utf-8"><meta name="X-UA-Compatible" content="IE=edge"><title> 优化APP的显示性能 · zmc的技术博客</title><meta name="description" content="优化APP的显示性能 - zmc"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.jpeg"><link rel="stylesheet" href="/css/apollo.css"><link rel="search" type="application/opensearchdescription+xml" href="http://yoursite.com/atom.xml" title="zmc的技术博客"></head><body><div class="wrap"><header><a href="/" class="logo-link"><img src="/favicon.jpeg" alt="logo"></a><ul class="nav nav-list"><li class="nav-list-item"><a href="/" target="_self" class="nav-list-link">BLOG</a></li><li class="nav-list-item"><a href="/archives/" target="_self" class="nav-list-link">ARCHIVE</a></li><li class="nav-list-item"><a href="https://github.com/ZhangXiaoM" target="_blank" class="nav-list-link">GITHUB</a></li></ul></header><main class="container"><div class="post"><article class="post-block"><h1 class="post-title">优化APP的显示性能</h1><div class="post-info">Jul 21, 2018</div><div class="post-content"><p>APP 的显示性能问题一直以来都是一个经久不衰的话题，特别是滚动视图、表视图的滚动流畅性等等问题。那么从我们 <code>new</code> 一个 <code>UIKit</code> 开始到它在屏幕上显示的过程，CPU 和 GPU 以及显示设备是如何协同工作的呢？APP 的显示性能、帧率到底应该从哪些方面入手去优化？还是说忽略理论分析，而强行优化性能？下面我们就来讨论一下这个问题。</p>
+<h3 id="一、几个概念"><a href="#一、几个概念" class="headerlink" title="一、几个概念"></a>一、几个概念</h3><h4 id="1、像素和分辨率"><a href="#1、像素和分辨率" class="headerlink" title="1、像素和分辨率"></a>1、像素和分辨率</h4><p>像素，通俗的来讲就是构成图像的最小单位，APP 的显示界面就是由像素组成，每个像素都会携带一个由 RGB 三原色组成的颜色信息，一个界面所有的像素和其携带的颜色信息组成我们肉眼看到的多彩的界面。分辨率就是一个界面可以显示的像素数，比如 iPhone 6 的分辨率为 750x1334，即单个 iPhone 6 界面可以显示 750x1334 个像素。分辨率的大小决定了画面的精细程度。比如：</p>
+<p><img src="http://i1.hdslb.com/bfs/archive/aafcde785dc26db2a710c2faa133b7a9bd35015e.jpg" alt=""></p>
+<p>左侧的图片甚至可以看到一个一个的小格子（像素）。</p>
+<h4 id="2、位图"><a href="#2、位图" class="headerlink" title="2、位图"></a>2、位图</h4><p><a href="https://zh.wikipedia.org/wiki/%E4%BD%8D%E5%9B%BE" target="_blank" rel="noopener">位图</a>，在计算机术语中，它是一种数据结构，我们也可以理解为，一张由二进制表示的图像，它也是由若干个点组成，每个点会携带一个表示 RGB 三原色的数值，比如 <code>0xffffff</code> 等。</p>
+<h4 id="3、FPS（Frame-per-second，帧率）"><a href="#3、FPS（Frame-per-second，帧率）" class="headerlink" title="3、FPS（Frame per second，帧率）"></a>3、FPS（Frame per second，帧率）</h4><p>在计算机图形学、视频、动画、游戏等领域都有帧率的影子，<a href="https://www.bilibili.com/video/av15263885?spm_id_from=333.338.__bofqi.25" target="_blank" rel="noopener">这个视频</a>可以帮助我们很好的理解这个概念，当我们在 APP 上滚动视图时，滚动动画其实就是一帧一帧的图像组成的，只不过 CPU 让它滚动的频率过快，才形成了动画，其实视频、动画、游戏等都是相同的原理。iOS 设备的帧率是 60，也就是 CPU 会每秒刷新 60 次界面，如果不够这个数，就会丢帧，丢帧的直观感受就是小时候看 CD 机时，我们叫丢帧为卡碟，这也是界面不流畅或者卡顿的根源。</p>
+<h4 id="4、CALayer-和-UIView"><a href="#4、CALayer-和-UIView" class="headerlink" title="4、CALayer 和 UIView"></a>4、CALayer 和 UIView</h4><p><code>UIView</code> 和 <code>CALayer</code> 都是一些被层级关系管理的矩形块，每一个视图都有一个 layer，当我们对视图做仿射变换（比如旋转、缩放），滑动、渐变等动画时，其实是操作的它的 layer，我们也可以直接对每个视图的 layer 做这些事。</p>
+<p><code>UIView</code> 是对 <code>CALayer</code> 的高级封装，他除了具有和 layer 相同的功能以外，还能处理手势事件。但是为什么 iOS 要基于 <code>UIView</code> 和 <code>CALayer</code> 提供两个平行的层级关系呢？为什么不用一个简单的层级来处理所有事情呢？原因在于要做职责分离，这样也能避免很多重复代码。在 iOS 和 Mac OS 两个平台上，事件和用户交互有很多地方的不同，基于多点触控的用户界面和基于鼠标键盘有着本质的区别，这就是为什么 iOS 有 UIKit 和 <code>UIView</code>，但是 Mac OS 有 AppKit 和 <code>NSView</code> 的原因。他们功能上很相似，但是在实现上有着显著的区别。</p>
+<p> <code>UIView</code> 和 <code>CALayer</code>  之间有一个 <strong>has a</strong> 的关系，每一个视图都 has a layer，其实既然视图是对图层能力的扩充，那么为什么不是继承关系？这是因为 has a 比 is a 具有更好的扩展性和可维护性。</p>
+<p>二者有相同的层级关系，父视图（父图层）、子视图（子图层），这个应该没人不知道，不再赘述。</p>
+<h4 id="5、寄宿图"><a href="#5、寄宿图" class="headerlink" title="5、寄宿图"></a>5、寄宿图</h4><p>上面说，每个我们在手机屏幕上看到的内容都是由像素组成的图像，动画也是有一帧一帧的图像组成的，每个图像在经过 GPU 处理之前都是以位图的形式存储在内存中，它也被成为 <code>CALayer</code> 的寄宿图：</p>
+<figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/** Layer content properties and methods. **/</span></span><br><span class="line"></span><br><span class="line"><span class="comment">/* An object providing the contents of the layer, typically a CGImageRef,</span></span><br><span class="line"><span class="comment"> * but may be something else. (For example, NSImage objects are</span></span><br><span class="line"><span class="comment"> * supported on Mac OS X 10.6 and later.) Default value is nil.</span></span><br><span class="line"><span class="comment"> * Animatable. */</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">@property</span>(<span class="keyword">nullable</span>, <span class="keyword">strong</span>) <span class="keyword">id</span> contents;</span><br></pre></td></tr></table></figure>
+<h4 id="6、Core-Graphics"><a href="#6、Core-Graphics" class="headerlink" title="6、Core Graphics"></a>6、Core Graphics</h4><p>CG 是一个轻量级的 2D 绘图 API，<code>CALayer</code> 工作在它的上层，当我们创建一个 <code>UIView</code> 时，<code>CALayer</code> 会使用 CG 生成一个位图，所以，它的作用是生成位图，我们也可以不通过 <code>CALayer</code> 而直接使用它：</p>
+<figure class="highlight objc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">CGContextRef</span> ctx = <span class="built_in">UIGraphicsGetCurrentContext</span>();</span><br><span class="line"><span class="built_in">CGContextAddRect</span>(ctx, <span class="built_in">CGRectMake</span>(<span class="number">100</span>, <span class="number">100</span>, <span class="number">100</span>, <span class="number">100</span>));</span><br><span class="line"><span class="built_in">CGContextSetFillColorWithColor</span>(ctx, [<span class="built_in">UIColor</span> redColor].CGColor);</span><br><span class="line"><span class="built_in">CGContextFillPath</span>(ctx);</span><br></pre></td></tr></table></figure>
+<p>用 CG 绘制一个简单的矩形。</p>
+<h4 id="7、Core-Animation"><a href="#7、Core-Animation" class="headerlink" title="7、Core Animation"></a>7、Core Animation</h4><p>Core Animation 的作用不仅仅是动画，我们可能对它有点误解，动画的能力只是它所有能力中的冰山一角。</p>
+<p>当我双击 home 键或者长按应用图标的时候，iPhone 都会有动画交互，其实动画不止存在于应用内，也存在于应用外。动画和图层的显示是一个独立的渲染服务进程，当我们在应用内准备好动画的执行时间、位图等内容时，CA 通过 IPC（进程通信） 将这些信息传递给渲染进程，它会调用 OpenGL-ES API 完成对动画的渲染工作。OpenGL 是一个开放式的图形库，它负责使用 GPU 和图形管线等硬件将位图输送到等屏幕上。</p>
+<p>（我没有深入研究过 OpenGL 和硬件渲染，仅仅知道一些皮毛，所以不做过多的讨论。）</p>
+<h3 id="二、一个视图从创建到显示在屏幕上"><a href="#二、一个视图从创建到显示在屏幕上" class="headerlink" title="二、一个视图从创建到显示在屏幕上"></a>二、一个视图从创建到显示在屏幕上</h3><p>CPU 和 GPU 的工作原理请自行维基百科，从上面的几个概念，我们可以得出一个结论：</p>
+<p><img src="https://upload-images.jianshu.io/upload_images/5314152-c8542442dfa8458f.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt=""></p>
+<p>整个图像的绘制和显示过程如上图，其实这里 <code>CALayer</code> 并没有承担图层的工作，它更像是保存图像属性的数据模型，如上文我们用 CG 绘制一个矩形时，会给它的上下文设置一些信息，比如填充色、大小、位置等信息，而这些内容都是我们平常工作中设置给 layer 或者 view 的，因此，可以认为 <code>CALayer</code> 是 CG 上下文的对象描述。</p>
+<p>从创建一个 <code>UIView</code> 到它显示在屏幕上，经历了如下几个步：</p>
+<ul>
+<li><strong>布局</strong>，准备视图/图层的层级关系，以及视图/图层的属性（背景色、位置、填充内容、阴影等）。</li>
+<li><strong>绘制</strong>，由 CG 生成图层的寄宿图（位图），调用 <code>-drawRect:</code> 方法。</li>
+<li><strong>准备</strong>，准备将位图和一些动画信息打包发送给渲染服务进程，同时 CA 也会解码动画的执行时间、缓冲函数（渐入渐出）等一些信息。</li>
+<li><strong>提交</strong>，CA 打包所有位图和动画属性，通过 IPC 发送到渲染服务进程。</li>
+<li><strong>纹理化</strong>，渲染服务进程按照图层之间的层级结构将所有的位图信息计算后，设置 OpenGL 几何形状。</li>
+<li><strong>渲染</strong>，OpenGL 指令操作 GPU、图形总线等将图像渲染到屏幕上。</li>
+</ul>
+<p>现在回想一下，好像工作中，也就经历了第一步，可能有部分人会经历第二步，看起来简单的过程，其实幕后工作很复杂，当然我们可能永远不会绕过 CA 直接编写 OpenGL 程序，但是知道这些幕后工作对优化 APP 来说有很大的意义。</p>
+<p>CPU 和 GPU 协同工作，上面的六个步骤前五步都是 CPU 的工作，第六步才交付给 GPU，它用来采集图片和形状（三角形），运行变换，应用纹理和混合然后把它们输送到屏幕上。也就是说渲染之前的计算、绘制等仍然会占用 CPU 和 RAM 资源。</p>
+<p>考虑一下上面几步哪些会是 CPU 和 GPU 的性能瓶颈？</p>
+<ul>
+<li>布局计算，如果视图层级过于复杂，当视图呈现或者修改的时候，计算图层布局就会消耗一部分时间。Autolayout 会增加 CPU 的计算时间，但是它又有更好的可维护性，建议平衡取舍后使用它。</li>
+<li><code>-drawRect:</code> ，重写这个方法会产生一定的性能损耗，我们被灌输过这样的观点，下文会解释原因所在。</li>
+<li>特别复杂的视图层级，当图层绘制完成后，CA 会将所有的位图打包，通过 IPC 提交给渲染服务，IPC 是 CPU 的工作，假如视图层级特别多的话，也会增加 CPU 的传送时间。</li>
+<li>重绘（每一帧都需要相同的像素填充多次），主要是半透明的图层引起的，因为半透明的图层在显示时，需要和后面的图层的像素混合才能达到半透明的效果，GPU 需要耗费更多的时间来绘制。</li>
+<li>离屏渲染，有些图层 GPU 会用离屏渲染的方式绘制它，也就是在 GPU 的缓冲区渲染，然后在需要显示的时候，直接从缓冲区取出来显示，假如 GPU 在渲染其他图层的过程中，发生了离屏渲染 ，就会造成渲染的上下文切换，假如离屏渲染的图层过多的话，会给 GPU 带来很大的负载。</li>
+<li>图片过大，当加载一个图片到内存中并显示时，CPU 会对它进行预处理，比如压缩和解压缩，当图片过大，就会增加 CPU 的负载。</li>
+</ul>
+<p>等等。</p>
+<h4 id="drawRect-带来的性能问题"><a href="#drawRect-带来的性能问题" class="headerlink" title="- drawRect: 带来的性能问题"></a>- drawRect: 带来的性能问题</h4><p><code>drawRect:</code> 方法的默认实现是不做任何事情，只要你给 <code>UIView/CALayer</code> 设置合适的属性，CG 就会正确的绘制它，<code>-drawRect:</code> 方法只有首次绘制某个图层，或者某个图层的可见部分失效的情况下才会被调用。</p>
+<p>当我们绘制完一个图层时（调用 <code>-drawRect:</code>），CPU 会保存一份快照在缓冲区，对于动画来说，图层的每一帧变化总是会有一大块未被改变的像素集合，比如滚动视图，滚动的前后帧的区别仅仅是很小的一部分像素块。当改变发生时，CPU 会将未改变的部分从缓冲区快照中复制到新的图层，放到合适的位置，改变的部分被重新计算和绘制，而此时 <code>-drawRect</code> 也会被调用。假如重写了这个方法，此时 CG 会重新绘制整个图层，也就是当改变发生时，CG 不会复制未发生改变的大块像素，而是重新绘制整个图层，这就是重写它会带来性能损耗的原因。</p>
+<h4 id="imageView-的优势-or-劣势？"><a href="#imageView-的优势-or-劣势？" class="headerlink" title="imageView 的优势 or 劣势？"></a>imageView 的优势 or 劣势？</h4><p>假如我们直接用静态的 image 填充 <code>imageView</code> 就节省了绘制的过程，直接被 CG 压缩转化为位图后，扔给 CA 处理，然后渲染进程将图片解压缩，纹理化为三角形后，交给 GPU 去渲染。如果图片不是特别大的话，看上去比直接绘制速度可能会快一点，但是，即使 iOS 的闪存比一般的磁盘读写速度快很多，而 RAM 仍然会比它快 200 倍，iOS 视图懒加载的特性又导致了它不会在使用图片之前将它加载进内存，所以，静态图片的优势也就荡然无存，因此，CG 绘制要比静态图片更快一些。</p>
+<h3 id="三、APP-显示性能提升的方案"><a href="#三、APP-显示性能提升的方案" class="headerlink" title="三、APP 显示性能提升的方案"></a>三、APP 显示性能提升的方案</h3><p>基于上述的理论分析，可以得出几种解决性能问题的方案：</p>
+<ul>
+<li>首先，使用 <code>UIKit</code>、<code>CALayer</code> 或者 <code>Core Graphics</code> 绘制寄宿图，都不能给性能带来显著的提升，<code>UIKit</code> 相对于 CG 并不会产生 CPU 的性能损耗，反而能让我们更好的使用面向对象机制。如果要使用异步绘制的话，请使用 CG，但同时也要注意 UI 作为临界区时带来的线程安全问题。</li>
+<li>Autolayout，自动布局从诞生开始就是一个争议性的存在，现在我们可以确定它对性能有一定的损耗，因为 CPU 要重新计算布局，但是它又带来了更好的可维护性，随着硬件的提升，这点损耗在我看来是无伤大雅的，但是究竟如何选择，还要衡量一下利弊，最好不要在性能要求很高的地方使用它。</li>
+<li>不要重写 <code>-drawRect:</code>。</li>
+<li>尽量用代码代替本地图片。</li>
+<li>同一个界面，不要有太复杂的视图层级，最好让所有的子视图都在同一层级。</li>
+<li>说服你们的 UI，减少不必要的圆角、阴影等可能产生离屏渲染的图层。</li>
+<li>尽量将所有的图层都设置为不透明。尽量！！</li>
+<li>从磁盘和网络加载的图片不宜过大，网络图片库，类似于 SDWebImage 会对这方面优化。</li>
+</ul>
+<p>等等。</p>
+<p>这些方法可能都是些老生常谈的内容，因为我们可能在很多地方看到前辈们对我们的忠告，但是从来没有人告诉过我为什么要这样，前面的理论分析都是这段结果的铺垫。</p>
+<h4 id="更流畅的-tableView"><a href="#更流畅的-tableView" class="headerlink" title="更流畅的 tableView"></a>更流畅的 tableView</h4><p>上面提到了，滚动视图的滚动动画中 iOS 所做的优化，即复用不变的部分，重绘可变的部分。相对于显示能力，大家更关注 <code>tableView</code> 的滚动流畅性，滚动动画其实是一帧一帧的图像衔接在一起产生的，因此上述几点对每一帧图像的优化当然也对滚动视图至关重要。比如将所有 <code>cell</code> 的子视图都放在同一层级，同样也会提高滚动的流畅性。</p>
+<p><code>tableView</code> 和普通视图不同的是，它有好几个数据源代理方法，而它的代理方法又是绘制它的关键，因此无论更新数据源还是滚动都会多次调用它的代理方法，现在你应该知道为什么滚动的时候也多次调用代理方法了。假如我们滚动的过程中，绘制帧率达不到 60 次/s，就会造成卡顿的视觉效果（和卡碟差不多）。针对这些，我们也可以提几个优化的点：</p>
+<ul>
+<li>代理方法中不要做太多的耗时工作，它会造成滚动视图的时候占用 CPU，阻塞主线程，从而导致帧率下降。缓存 <code>cell</code> 高度，避免滚动时计算是个不错的好方法。</li>
+<li>尽量不要改变 <code>cell</code> 的显示内容，比如太多的事件导致的 UI 变化，<code>cell</code> 的定位是一个轻量级的展示控件。因为，<code>cell</code> 变化过多的话，就会导致滚动的时候，可变的区域增大。</li>
+<li>RunLoop 单独使用一个 mode 来处理滚动的原因就是为了保持它的帧率，我们可以将它加入 <code>commonModes</code>，让 RunLoop 在响应其他事件的同时滚动视图，但是其他事件可能会阻塞主线程，导致帧率下降，因此，尽可能的处理轻量级的事件，或者使用异步子线程来做。</li>
+</ul>
+<p>等等，后面想到再补充。</p>
+<h3 id="四、总结"><a href="#四、总结" class="headerlink" title="四、总结"></a>四、总结</h3><p>以前总是盲目的看别人的博客，然后优化性能，缺少真正的理论依据，因此自己整理一下，其中不乏一些自己的见解，当然也都是建立在理论上的结果，仅供参考。</p>
+<h3 id="五、参考"><a href="#五、参考" class="headerlink" title="五、参考"></a>五、参考</h3><p>1、<a href="https://stackoverflow.com/questions/17715530/the-relationship-between-coregraphics-uiviews-and-calayers" target="_blank" rel="noopener">The relationship between CoreGraphics, UIViews and CALayers</a></p>
+<p>2、<a href="https://stackoverflow.com/questions/14659563/to-drawrect-or-not-to-drawrect-when-should-one-use-drawrect-core-graphics-vs-su" target="_blank" rel="noopener">to drawRect or not to drawRect (when should one use drawRect/Core Graphics vs subviews/images and why?)</a></p>
+<p>3、<a href="https://stackoverflow.com/questions/4392918/what-is-different-between-coregraphics-and-coreanimation" target="_blank" rel="noopener">What is different between CoreGraphics and CoreAnimation</a></p>
+<p>4、<a href="https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques" target="_blank" rel="noopener">https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques</a></p>
+<p>5、<a href="https://developer.apple.com/documentation/uikit/uiview/1622529-drawrect" target="_blank" rel="noopener">https://developer.apple.com/documentation/uikit/uiview/1622529-drawrect</a></p>
+<p>6、<a href="https://developer.apple.com/videos/wwdc/2011/?id=129" target="_blank" rel="noopener">Practical Drawing for iOS Developers</a></p>
+</div></article></div></main><footer><div class="paginator"><a href="/2019/09/01/编译、汇编、链接、加载、显示/" class="prev">PREV</a><a href="/2018/07/13/runtime管理weak引用的方式/" class="next">NEXT</a></div><div class="copyright"><p>© 2015 - 2019 <a href="http://yoursite.com">zmc</a>, powered by <a href="https://hexo.io/" target="_blank">Hexo</a> and <a href="https://github.com/pinggod/hexo-theme-apollo" target="_blank">hexo-theme-apollo</a>.</p></div></footer></div><script async src="//cdn.bootcss.com/mathjax/2.7.0/MathJax.js?config=TeX-MML-AM_CHTML" integrity="sha384-crwIf/BuaWM9rM65iM+dWFldgQ1Un8jWZMuh3puxb8TOY9+linwLoI7ZHZT+aekW" crossorigin="anonymous"></script></body></html>

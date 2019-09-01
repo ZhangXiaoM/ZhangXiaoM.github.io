@@ -1,0 +1,71 @@
+<!DOCTYPE html><html><head><meta name="generator" content="Hexo 3.9.0"><meta charset="utf-8"><meta name="X-UA-Compatible" content="IE=edge"><title> Swift集合函数:Reduce、Map、FlatMap、Filter详解 · zmc的技术博客</title><meta name="description" content="Swift集合函数:Reduce、Map、FlatMap、Filter详解 - zmc"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.jpeg"><link rel="stylesheet" href="/css/apollo.css"><link rel="search" type="application/opensearchdescription+xml" href="http://yoursite.com/atom.xml" title="zmc的技术博客"></head><body><div class="wrap"><header><a href="/" class="logo-link"><img src="/favicon.jpeg" alt="logo"></a><ul class="nav nav-list"><li class="nav-list-item"><a href="/" target="_self" class="nav-list-link">BLOG</a></li><li class="nav-list-item"><a href="/archives/" target="_self" class="nav-list-link">ARCHIVE</a></li><li class="nav-list-item"><a href="https://github.com/ZhangXiaoM" target="_blank" class="nav-list-link">GITHUB</a></li></ul></header><main class="container"><div class="post"><article class="post-block"><h1 class="post-title">Swift集合函数:Reduce、Map、FlatMap、Filter详解</h1><div class="post-info">Jan 2, 2018</div><div class="post-content"><h2 id="Reduce"><a href="#Reduce" class="headerlink" title="Reduce"></a>Reduce</h2><p>声明<br><figure class="highlight swift"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">reduce</span>&lt;Result&gt;<span class="params">(<span class="number">_</span> initialResult: Result, <span class="number">_</span> nextPartialResult: <span class="params">(Result, Element)</span></span></span> <span class="keyword">throws</span> -&gt; <span class="type">Result</span>) <span class="keyword">rethrows</span> -&gt; <span class="type">Result</span></span><br></pre></td></tr></table></figure></p>
+<blockquote>
+<p>Returns the result of combining the elements of the sequence using the given closure.</p>
+</blockquote>
+<blockquote>
+<p>使用给定的block来组合集合中的元素，并且返回组合后的结果</p>
+</blockquote>
+<p>参数</p>
+<blockquote>
+<p>initialResult</p>
+</blockquote>
+<blockquote>
+<p>The value to use as the initial accumulating value. initialResult is passed to nextPartialResult the first time the closure is executed.</p>
+</blockquote>
+<blockquote>
+<p>初始值</p>
+</blockquote>
+<blockquote>
+<p>nextPartialResult</p>
+</blockquote>
+<blockquote>
+<p>A closure that combines an accumulating value and an element of the sequence into a new accumulating value, to be used in the next call of the nextPartialResult closure or returned to the caller.</p>
+</blockquote>
+<blockquote>
+<p>带有两个参数的block，block的第一个参数为之前的计算结果，如果是第一次计算，则默认为initialResult。第二个参数为集合中的下一个元素。返回值为遍历完整个集合后的组合结果。block中可以定义两个参数的组合规则。</p>
+</blockquote>
+<p>例如<br><figure class="highlight swift"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> da = [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>]</span><br><span class="line"><span class="keyword">let</span> sum = da.<span class="built_in">reduce</span>(<span class="number">0</span>) &#123; (result: <span class="type">Int</span>, ele: <span class="type">Int</span>) -&gt; <span class="type">Int</span> <span class="keyword">in</span></span><br><span class="line">	<span class="keyword">return</span> result + ele</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// sum = 15</span></span><br></pre></td></tr></table></figure></p>
+<p>对数组<code>da</code>中的元素求和，第一个参数<code>0</code>为初始值，当数组第一次执行<code>result + ele //ele = data[0]</code>时，此时的<code>result</code>即为初始值。</p>
+<p>可简写为<br><figure class="highlight swift"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> da = [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>]</span><br><span class="line"><span class="keyword">let</span> sum = da.<span class="built_in">reduce</span>(<span class="number">0</span>) &#123;</span><br><span class="line">	<span class="keyword">return</span> $<span class="number">0</span> + $<span class="number">1</span></span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// sum = 15</span></span><br></pre></td></tr></table></figure></p>
+<p>或者<br><figure class="highlight swift"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> da = [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>]</span><br><span class="line"><span class="keyword">let</span> sum = da.<span class="built_in">reduce</span>(<span class="number">0</span>, +)</span><br><span class="line"><span class="comment">// sum = 15</span></span><br></pre></td></tr></table></figure></p>
+<p>注：Swift中操作符为函数，函数允许使用和block具有相同参数的函数作为参数代替block</p>
+<p>上述代码的作用相当于<br><figure class="highlight swift"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> da = [<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>, <span class="number">5</span>]</span><br><span class="line"><span class="keyword">var</span> sum = <span class="number">0</span></span><br><span class="line"><span class="keyword">for</span> i <span class="keyword">in</span> <span class="number">0</span>..&lt;da.<span class="built_in">count</span> &#123;</span><br><span class="line">	sum += da[i]</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// sum = 15</span></span><br></pre></td></tr></table></figure></p>
+<h2 id="Map-amp-FlatMap"><a href="#Map-amp-FlatMap" class="headerlink" title="Map &amp; FlatMap"></a>Map &amp; FlatMap</h2><h3 id="Map"><a href="#Map" class="headerlink" title="Map"></a>Map</h3><blockquote>
+<p>Returns an array containing the results of mapping the given closure over the sequence’s elements.</p>
+</blockquote>
+<blockquote>
+<p>使用给定的block将数组映射为一个新的数组。新的数组元素为block中设置的映射规则确定。 </p>
+</blockquote>
+<p>参数：</p>
+<blockquote>
+<p>transform</p>
+</blockquote>
+<blockquote>
+<p>A mapping closure. transform accepts an element of this sequence as its parameter and returns a transformed value of the same or of a different type.</p>
+</blockquote>
+<blockquote>
+<p>一个block，参数为数组中的一个元素，block返回一个使用映射规则转换之后的元素。</p>
+</blockquote>
+<p>例如<br><figure class="highlight swift"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> cast = [<span class="string">"Vivien"</span>, <span class="string">"Marlon"</span>, <span class="string">"Kim"</span>, <span class="string">"Karl"</span>]</span><br><span class="line"><span class="keyword">let</span> lowercaseNames = cast.<span class="built_in">map</span> &#123; $<span class="number">0</span>.lowercased() &#125;</span><br><span class="line"><span class="comment">// 'lowercaseNames' == ["vivien", "marlon", "kim", "karl"]</span></span><br><span class="line"><span class="keyword">let</span> letterCounts = cast.<span class="built_in">map</span> &#123; $<span class="number">0</span>.<span class="built_in">count</span> &#125;</span><br><span class="line"><span class="comment">// 'letterCounts' == [6, 6, 3, 4]</span></span><br></pre></td></tr></table></figure></p>
+<h3 id="FlatMap"><a href="#FlatMap" class="headerlink" title="FlatMap"></a>FlatMap</h3><p><code>flatMap(_:)</code>和<code>map(_:)</code>一样，也是可以将一个集合通过某种映射规则映射为另一个集合，不同的地方是，<code>flatMap(_:)</code>会将映射之后的元素强解包（unwraped），如果遇到<code>nil</code>，则将其过滤到，返回的新集合为过滤掉<code>nil</code>之后的集合；<code>map(_:)</code>返回的元素为<code>Optional</code>类型元素，如果集合中有<code>nil</code>，则返回的集合中也包·括<code>nil</code>，其他元素均为<code>Optional</code>类型。<br>例如：<br><figure class="highlight swift"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> cast = [<span class="literal">nil</span>, <span class="string">"Marlon"</span>, <span class="string">"Kim"</span>, <span class="string">"Karl"</span>]</span><br><span class="line"><span class="keyword">let</span> uppercaseNames = cast.<span class="built_in">map</span> &#123; $<span class="number">0</span>?.uppercased() &#125; <span class="comment">//1</span></span><br><span class="line"><span class="comment">// 'uppercaseNames' = [nil, Optional("MARLON"), Optional("KIM"), Optional("KARL")]</span></span><br><span class="line"><span class="keyword">let</span> foo = cast.flatMap &#123; $<span class="number">0</span>?.uppercased() &#125;<span class="comment">//2</span></span><br><span class="line"><span class="comment">// 'foo' = ["MARLON", "KIM", "KARL"]</span></span><br></pre></td></tr></table></figure></p>
+<p>1、将数组<code>cast</code>映射为一个新的数组，给定的映射规则是<code>$0?.uppercased()</code>，即将数组中的字符串全部转换成大写的形式，返回的新数组的元素为<code>optional</code>类型。</p>
+<p>2、将数组<code>cast</code>映射为一个新的数组，给定的映射规则是<code>$0?.uppercased()</code>，即将数组中的字符串全部转换成大写的形式，并且将返回的数组元素解包， 如果元素为<code>nil</code>，则过滤掉。</p>
+<h3 id="Filter"><a href="#Filter" class="headerlink" title="Filter"></a>Filter</h3><blockquote>
+<p>Returns an array containing, in order, the elements of the sequence that satisfy the given predicate.</p>
+</blockquote>
+<blockquote>
+<p>返回一个数组，该数组按顺序包含满足给定谓词的序列元素。</p>
+</blockquote>
+<p>参数</p>
+<blockquote>
+<p>isIncluded</p>
+</blockquote>
+<blockquote>
+<p>A closure that takes an element of the sequence as its argument and returns a Boolean value indicating whether the element should be included in the returned array.</p>
+</blockquote>
+<blockquote>
+<p>一个block，将集合的元素作为参数，并返回一个Boolean，用来指示这个元素是否包含在返回的数组中，如果包括，则将其添加入数组。</p>
+</blockquote>
+<p>例如<br><figure class="highlight swift"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">let</span> cast = [<span class="string">"Vivien"</span>, <span class="string">"Marlon"</span>, <span class="string">"Kim"</span>, <span class="string">"Karl"</span>]</span><br><span class="line"><span class="keyword">let</span> shortNames = cast.<span class="built_in">filter</span> &#123; $<span class="number">0</span>.<span class="built_in">count</span> &lt; <span class="number">5</span> &#125;</span><br><span class="line"><span class="built_in">print</span>(shortNames)</span><br><span class="line"><span class="comment">// Prints "["Kim", "Karl"]"</span></span><br></pre></td></tr></table></figure></p>
+<p>上述代码的作用为：筛选出名字的字数小于5的名字，<code>{ $0.count &lt; 5 }</code>这个block为筛选的谓词，<code>$0</code>为block的参数，即<code>shortNames</code>的元素。</p>
+</div></article></div></main><footer><div class="paginator"><a href="/2018/01/02/值类型和引用类型在Swift中的使用/" class="prev">PREV</a><a href="/2017/08/30/深入理解copy关键字/" class="next">NEXT</a></div><div class="copyright"><p>© 2015 - 2019 <a href="http://yoursite.com">zmc</a>, powered by <a href="https://hexo.io/" target="_blank">Hexo</a> and <a href="https://github.com/pinggod/hexo-theme-apollo" target="_blank">hexo-theme-apollo</a>.</p></div></footer></div><script async src="//cdn.bootcss.com/mathjax/2.7.0/MathJax.js?config=TeX-MML-AM_CHTML" integrity="sha384-crwIf/BuaWM9rM65iM+dWFldgQ1Un8jWZMuh3puxb8TOY9+linwLoI7ZHZT+aekW" crossorigin="anonymous"></script></body></html>

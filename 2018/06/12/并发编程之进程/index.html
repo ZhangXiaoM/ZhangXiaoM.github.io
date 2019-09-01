@@ -1,0 +1,67 @@
+<!DOCTYPE html><html><head><meta name="generator" content="Hexo 3.9.0"><meta charset="utf-8"><meta name="X-UA-Compatible" content="IE=edge"><title> 并发编程之进程 · zmc的技术博客</title><meta name="description" content="并发编程之进程 - zmc"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.jpeg"><link rel="stylesheet" href="/css/apollo.css"><link rel="search" type="application/opensearchdescription+xml" href="http://yoursite.com/atom.xml" title="zmc的技术博客"></head><body><div class="wrap"><header><a href="/" class="logo-link"><img src="/favicon.jpeg" alt="logo"></a><ul class="nav nav-list"><li class="nav-list-item"><a href="/" target="_self" class="nav-list-link">BLOG</a></li><li class="nav-list-item"><a href="/archives/" target="_self" class="nav-list-link">ARCHIVE</a></li><li class="nav-list-item"><a href="https://github.com/ZhangXiaoM" target="_blank" class="nav-list-link">GITHUB</a></li></ul></header><main class="container"><div class="post"><article class="post-block"><h1 class="post-title">并发编程之进程</h1><div class="post-info">Jun 12, 2018</div><div class="post-content"><p>在计算机的世界中，CPU 是唯一的，内存是唯一的，磁盘是唯一的，大部分资源都是共享的，但是正在运行的应用程序不是唯一的，因此，不同的应用程序可能在会在同一时刻使用 CPU、内存、磁盘等等，这样就会造成操作系统对硬件和软件的管理混乱。进程概念的引入很好的解决了这个问题，进程是对正在运行的应用程序的抽象，它使所有的应用程序都以为自己在独占的使用 CPU 和内存，由于这些抽象的存在，操作系统只需要关心如何正确的调度进程，而不用过多的关心每个进程的细节。</p>
+<h4 id="一、进程模型"><a href="#一、进程模型" class="headerlink" title="一、进程模型"></a>一、进程模型</h4><p>每个进程都由完整的逻辑控制流和虚拟内存构成，逻辑控制流即为正在执行的指令集，虚拟内存同样也是一个抽象概念，他是物理内存和文件的抽象。我们可以拿面向对象的思想看待操作系统相对于进程，对对象来说，我们只需要关心它的部分信息和能力，而不在意它的实现细节。</p>
+<p>进程有三种运行状态：阻塞、就绪、运行，三种状态的转换关系为：</p>
+<p><img src="https://upload-images.jianshu.io/upload_images/5314152-bedc9a2c44438ac7.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt=""></p>
+<p><strong>进程与应用程序</strong>，应用程序是由代码和数据组成的，它可以作为目标模块被存储在磁盘上， 或者作为段被存储在内存中，而进程是运行中的程序的一个特殊实例，进程的上下文中存储着程序运行的状态、寄存器、堆栈等信息。</p>
+<h4 id="二、多进程模型"><a href="#二、多进程模型" class="headerlink" title="二、多进程模型"></a>二、多进程模型</h4><p>对操作系统而言，多个进程并发的运行是其基本能力之一，但是单核 CPU 在同一时刻只能运行一个进程，因此操作系统会通过进程调度程序实现进程的调度，即调整多个进程运行的先后顺序，让它们能<em>并发的</em>运行。操作系统会维持一张进程表来保存当前被阻塞的进程的一些信息，目的是为了当此进程重新被调度到运行态时，可以继续接着被阻塞时的状态运行，该进程表包含了所有进程运行的程序计数器、堆栈指针、内存分配状况、打开的文件状态、调度信息等，而每个进程的这些信息被称为该进程的<strong>上下文</strong>。进程表的存在可以使操作系统完美的切换进程，操作系统通过不同的调度方式实现并发编程，如下：</p>
+<p><img src="https://upload-images.jianshu.io/upload_images/5314152-5608219e35413fa4.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt=""></p>
+<p>如图 a 和图 b，进程通过这个方式让自己看上去独占的使用程序计数器，如图 c，CPU 通过调度程序实现多进程的<em>并发</em>运行。</p>
+<h4 id="三、进程调度"><a href="#三、进程调度" class="headerlink" title="三、进程调度"></a>三、进程调度</h4><p>上面说了，在计算机的世界，CPU 是稀缺资源，当多个进程同时处于就绪态时就会同时抢占 CPU，因此操作系统需要通过调度算法决定下一个使用 CPU 的进程。调度算法不是唯一的，不同的系统和不同应用场景就会产生不同的调度算法。常见的调度算法大致可归为三类：1）批处理（非抢占），2）交互式（抢占），3）实时。</p>
+<h5 id="3-1-批处理（非抢占）"><a href="#3-1-批处理（非抢占）" class="headerlink" title="3.1 批处理（非抢占）"></a>3.1 批处理（非抢占）</h5><p>非抢占式，也就是进程运行的先后顺序由调度算法确定，在当前进程运行完之前，不允许其他进程抢占。</p>
+<ul>
+<li><p><strong>先来先服务</strong>，顾名思义，按照申请使用 CPU 的先后顺序决定进程使用 CPU 的顺序，调度程序会维护一个队列保存使用 CPU 的进程的顺序，从队头到队尾依次使用，并且直到一个进程运行完它期望的时间，才会运行下一个。当某个进程被阻塞时，它就会被排到队尾等待下一次运行。</p>
+</li>
+<li><p><strong>最短作业优先</strong>，运行时间最短的进程优先使用 CPU，例如运行时间分别为：4，1，3，2 分钟的4个进程 A、B、C、D 同时到达，4个进程的运行次序为运行时间最短的到运行时间最长的，即 B、D、C、A 依次运行。注意，只有几个进程同时到达时，这个算法才是最优的。</p>
+</li>
+</ul>
+<h5 id="3-2-交互式（抢占）"><a href="#3-2-交互式（抢占）" class="headerlink" title="3.2 交互式（抢占）"></a>3.2 交互式（抢占）</h5><p>抢占式的概念意味着，当前正在运行的进程还没运行完其期望的运行时间就被其他进程抢占。</p>
+<ul>
+<li><strong>最短剩余时间优先</strong>，该算法是最短作业优先的抢占式版本，该算法总是优先选择剩余运行时间最短的那个进程运行，调度程序会先从到达的进程中选择最短运行时间的进程运行，在运行过程中新到达进程的运行时间如果短于正在运行的进程的剩余时间，那么正在运行的进程就会被挂起，新到达的进程会被运行。当当前运行进程运行完，调度程序会在剩下所有处于就绪状态的进程中选择最短剩余时间的进程运行。</li>
+<li><strong>轮转式调度</strong>，轮转式调度是最古老的、最公平的、使用最多的调度算法，它会为每个进程分配一个运行的时间段，称为<strong>时间片</strong>。 调度程序会维护一张待运行的进程列表，当一个进程用完它的时间片之后，就会被移到队尾，等待下一次运行。如果某个进程在时间片结束之前阻塞或者运行完成，调度程序会立刻切换到下一个进程。</li>
+<li><strong>优先级调度</strong>，轮转式调度默认所有的进程同等重要，而优先级调度则根据每个进程的重要程度分为不同的优先级，优先级高的进程先运行。同等优先级的进程遵循轮转式调度，即同一优先级的进程被放入同一队列中进行轮转调度，只有高优先级的队列为空时，才会运行低优先级队列中的进程。这种调度方法的劣势是低优先级的进程很可能会长期处于<em>饥饿</em>状态。</li>
+</ul>
+<h5 id="3-3-实时"><a href="#3-3-实时" class="headerlink" title="3.3 实时"></a>3.3 实时</h5><p>实时调度是一种受时间主导的调度系统，例如，在某一时间，外部的一种或者多种物理设备给了计算机一个刺激，而计算机必须要在一个确定的时间范围内做出适当的反应。这就要求调度程序马上抢占当前正在运行的进程，并且调度新的进程响应外部刺激，这些进程一般寿命较短，并且很短的时间内就可以运行完成。</p>
+<h4 id="四、进程间的通信（IPC-Inter-Process-Communication）"><a href="#四、进程间的通信（IPC-Inter-Process-Communication）" class="headerlink" title="四、进程间的通信（IPC, Inter Process Communication）"></a>四、进程间的通信（IPC, Inter Process Communication）</h4><p>在多进程并发的环境下，一个进程需要把信息传送给另一个进程是比较常见的应用场景。例如，手机应用中将某个应用的某些信息传送给微信分享给其他人就是一种进程间通信的应用场景。进程间通信的几种情况主要有：1、一个进程将自己私有地址空间（虚拟内存）中的信息传送给另一个进程的虚拟内存；2、两个进程共享一部分内存，而且两个进程都有可能读取和改写共享内存中的某些信息。</p>
+<p>所以，一般的 IPC 主要有以下几种：</p>
+<ul>
+<li><p><strong>管道</strong>，一个进程连接数据流到另一个进程的通道，把一个进程的输出通过管道传递给另一个进程。需要注意的是，通过管道传递信息的进程必须是父进程和子进程的关系，这也是该方法的一个缺陷。</p>
+</li>
+<li><p><strong>命名管道</strong>，也被称为<strong>FIFO文件</strong>，它是一种特殊类型的文件，但是它的作用和管道类似，一个进程可以通过打开它进行读写操作然后传递给另一个进程，两个进程之间可以不是父子关系。</p>
+</li>
+<li><p><strong>socket</strong>，就是我们经常提及的网络编程中的套接字，它通过字节流的形式实现两个进程间的通信，当然这两个进程可以是同一台计算机的两个进程，也可以是通过网络连接的不同计算机的两个进程。</p>
+</li>
+<li><p><strong>消息队列</strong>，一个存放数据块的队列，发送消息的进程将数据块依次添加进队列，接收消息的进程从队列中依次取出数据块。</p>
+</li>
+<li><p><strong>信号</strong>，操作系统会因为响应某些条件而产生事件，信号即为该事件，接收到该事件的进程会处理并完成该事件。例如在任务管理器中强制退出某个进程，操作系统就会给该进程发送一个 <code>kill</code>  信号，退出该进程。另外，某个正在运行的应用程序因为某些原因发生了 crash，这也是因为进程捕获了异常信号导致的进程退出。</p>
+</li>
+<li><p><strong>共享内存</strong>，顾名思义，两个或者几个进程可以共同访问的地址空间被称为共享内存，进程们可以通过修改共享内存中的内容同步信息到其他进程。当然这也会造成多进程同时修改和读取共享内存中的内容，从而导致信息错乱。</p>
+</li>
+<li><p><strong>信号量</strong>，准确的来说，信号量并不是进程通信的手段而是解决进程同步缺陷的手段。要理解信号量的概念必须要知道<strong>竞态条件</strong>和<strong>临界区</strong>的概念：</p>
+<p><strong>竞态条件</strong>：当两个进程同时访问和改写共享内存时，例如共享内存中某个整型变量 <code>i</code> 初始化为 0，当进程 A 和进程 B 对变量 <code>i</code> 加一操作时：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">变量i: <span class="number">0</span>   <span class="number">1</span>   <span class="number">2</span>   <span class="number">3</span>   <span class="number">4</span>  </span><br><span class="line">进程A: <span class="number">0</span>+<span class="number">1</span>     <span class="number">2</span>+<span class="number">1</span>     <span class="number">4</span>+<span class="number">1</span></span><br><span class="line">进程B:     <span class="number">1</span>+<span class="number">1</span>     <span class="number">3</span>+<span class="number">1</span></span><br><span class="line">时间 : <span class="number">0</span>   <span class="number">1</span>   <span class="number">2</span>   <span class="number">3</span>   <span class="number">4</span></span><br></pre></td></tr></table></figure>
+<p>进程 A 在 0 时刻读取 <code>i</code> 的值为 0，并且将它加一，此时进程 A 期望得到的结果为 1，但是同时 CPU 切换到进程 B 运行，进程 B 读取 <code>i</code> 的值为 1，然后将它加一，此时 <code>i = 2</code>，切换到进程 A 执行时，进程 A 读取到的值为 2，而不是它期望的结果 1，因此就会产生不可知的错误，像这样两个或者多个进程读写共享数据时，最后的结果取决于进程运行的精确时序，称为竞态条件。</p>
+<p><strong>临界区</strong>，产生竞态条件的共享内存被称为临界区，即可以被多个进程同时读写的共享内存区域被称为临界区。</p>
+<p>信号量就是针对临界区的一种保护手段，它被定义为 0 或者正数，只有保护临界区的信号量的值为正数时，某个进程才可以访问临界区，并且在访问结束时将信号量作减一操作；否则的话，进程即被挂起直到信号量为 0 才能访问临界区。</p>
+</li>
+</ul>
+<h4 id="五、死锁"><a href="#五、死锁" class="headerlink" title="五、死锁"></a>五、死锁</h4><p>上文说到计算机的世界中许多资源都是独占的，例如 CPU，I/O，磁盘等，这些独占的资源就是造成死锁的原因之一。</p>
+<h5 id="5-1-资源"><a href="#5-1-资源" class="headerlink" title="5.1 资源"></a>5.1 资源</h5><p>进程使用资源的状态主要包括：1）请求资源；2）使用资源；3）释放资源。</p>
+<p>资源分为可抢占资源和不可抢占资源，对于可抢占资源来说，可以随时重新分配资源解决进程的调度问题，例如磁盘等。对于不可抢占资源来说，就意味着只有当前使用资源的进程释放了该资源才能分配给其他进程，例如打印机、CPU 等。</p>
+<h5 id="5-2-死锁"><a href="#5-2-死锁" class="headerlink" title="5.2 死锁"></a>5.2 死锁</h5><p>如果一个进程集合中的所有进程都在等待该集合中其他进程运行完成才能运行，则该进程集合处于死锁状态。例如，进程 A 在等待进程 B 的完成，进程 B 在等待进程 C 的完成，进程 C 在等待进程 A 的完成。</p>
+<p>产生死锁的条件：</p>
+<p>1）互斥条件。每个资源都分配给了某个进程或者是可用的。</p>
+<p>2）占有和申请条件。当前进程占有资源并且可以申请新的资源。</p>
+<p>3）不可抢占条件。所有被进程占有的资源都是不可抢占资源。</p>
+<p>4）循环等待条件。就是上文说的，几个进程形成环状的等待关系。</p>
+<p>这四个条件即为产生死锁的必要条件，只有它们同时满足时才会产生死锁。</p>
+<h5 id="5-3-死锁预防"><a href="#5-3-死锁预防" class="headerlink" title="5.3 死锁预防"></a>5.3 死锁预防</h5><p>我们已经知道了产生死锁的四个必要条件，而预防死锁打破其中一个条件即可：</p>
+<p>1）破坏互斥条件。就是让资源可以被多个进程占有，例如打印机的打印机守护进程，它会获得进程的全部要打印的信息时才开始打印，这样就避免了多个进程同时打印。</p>
+<p>2）破坏占有和申请条件。1、禁止已占有资源的进程再去申请其他资源；2、要求进程申请其他资源时先暂时释放其当前占有的所有资源。</p>
+<p>3）破坏不可抢占条件。某些资源可以通过虚拟化的形式被其他进程抢占，例如上面提到的打印机。</p>
+<p>4）破坏循环等待条件。1、禁止已占有资源的进程申请新的资源；2、将所有资源统一编号，进程申请资源的顺序必须是升序。这两种方法都可以破坏循环等待条件。</p>
+<h5 id="5-3-死锁避免"><a href="#5-3-死锁避免" class="headerlink" title="5.3 死锁避免"></a>5.3 死锁避免</h5><p><a href="https://zh.wikipedia.org/wiki/%E9%93%B6%E8%A1%8C%E5%AE%B6%E7%AE%97%E6%B3%95" target="_blank" rel="noopener">银行家算法</a></p>
+<h4 id="六、几个常见的-IPC-问题"><a href="#六、几个常见的-IPC-问题" class="headerlink" title="六、几个常见的 IPC 问题"></a>六、几个常见的 IPC 问题</h4><h5 id="6-1-哲学家就餐问题"><a href="#6-1-哲学家就餐问题" class="headerlink" title="6.1 哲学家就餐问题"></a>6.1 哲学家就餐问题</h5><p><a href="https://zh.wikipedia.org/wiki/%E5%93%B2%E5%AD%A6%E5%AE%B6%E5%B0%B1%E9%A4%90%E9%97%AE%E9%A2%98" target="_blank" rel="noopener">哲学家就餐</a>问题是经典的进程同步问题，当一个进程集中的进程在争夺不可抢占资源时，这种抢占被描述为哲学家占有左手叉子的同时再申请右手的叉子，而且叉子是不可抢占的并且互斥的，如果每个哲学家都占有左手叉子的同时申请右手叉子，就会满足死锁的四个必要条件，从而造成死锁。</p>
+<h5 id="6-2-读者写者问题"><a href="#6-2-读者写者问题" class="headerlink" title="6.2 读者写者问题"></a>6.2 读者写者问题</h5><p>我们平常工作中接触较多的多线程并发编程，很少会设计到多进程编程，但是读者写者问题同样适用于多线程编程，因为对同一个进程的多个线程来说，它们共享该进程的所有地址空间。读者写者问题就是典型的多线程同步问题，假如多个线程同时在读写同一块共享内存，当其中一个线程改写某些数据的时候，而另一个线程正在读取这部分数据，就会造成我们常说的线程安全问题，因为它读取的是错误的数据。读者写者问题的解决方式就是当一个线程（或者进程）在改写临界区数据的时候，其他线程不能访问临界区，如果没有线程在改写临界区，多个线程可以同时读取临界区的数据。</p>
+<p><strong>锁</strong>的概念可以帮助我们解决上述问题。我们会在多线程编程的文章中重点讨论<strong>锁</strong>。</p>
+<h4 id="七、总结"><a href="#七、总结" class="headerlink" title="七、总结"></a>七、总结</h4><p>充分理解进程、多进程编程、共享内存、临界区等概念可以帮助我们更好的解决并发带来的问题，同时也能帮助我们站在大局观看待整个应用程序的运行和运行过程中产生的问题。更能帮助我们准确分析和定位并发带来的一系列难题。</p>
+</div></article></div></main><footer><div class="paginator"><a href="/2018/06/26/isa指针中隐藏的黑魔法/" class="prev">PREV</a><a href="/2018/06/11/深入浅出谈算法/" class="next">NEXT</a></div><div class="copyright"><p>© 2015 - 2019 <a href="http://yoursite.com">zmc</a>, powered by <a href="https://hexo.io/" target="_blank">Hexo</a> and <a href="https://github.com/pinggod/hexo-theme-apollo" target="_blank">hexo-theme-apollo</a>.</p></div></footer></div><script async src="//cdn.bootcss.com/mathjax/2.7.0/MathJax.js?config=TeX-MML-AM_CHTML" integrity="sha384-crwIf/BuaWM9rM65iM+dWFldgQ1Un8jWZMuh3puxb8TOY9+linwLoI7ZHZT+aekW" crossorigin="anonymous"></script></body></html>
