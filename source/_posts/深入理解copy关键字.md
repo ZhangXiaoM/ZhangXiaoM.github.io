@@ -68,12 +68,12 @@ NSLog(@"%@",_aString);
  ```objc
 // MRC 下
 - (void)setAString:(NSString *)aString {
+    // retain 新值
+    id tmp = [aString retain];
     // 释放旧值
     [_aString release];
-    // retain 新值
-    _aString = [aString retain];
-    // release 新值
-    [aString release];
+    // 设置新值
+    _aString = tmp;
 }
  ```
 
@@ -97,12 +97,12 @@ MRC 下的 `-setter` 方法可以让我们清晰的看到 `strong` 关键字的�
 ```objc
 // MRC
 - (void)setAString:(NSString *)aString {
+    // 拷贝新值
+    id tmp = [aString copy];
     // 释放旧值
     [_aString release];
-    // 拷贝新值
-    _aString = [aString copy];
-    // release 新值
-    [aString release];
+    // 设置
+    _aString = tmp;
 }
 ```
 
